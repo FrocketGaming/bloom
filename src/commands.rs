@@ -5,7 +5,7 @@ use crate::snippets::{self, SnippetEdit};
 use crate::state::AppState;
 use crate::template::{self, FieldSpec, Part};
 use crate::variables::{self, Content, Variable};
-use crate::{engine, hotkey, matcher, palette, platform, tray, usage};
+use crate::{engine, hotkey, matcher, palette, platform, startup, tray, usage};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -253,12 +253,24 @@ pub fn save_settings(app: AppHandle, state: S, config: Config) -> Result<(), Str
     if new_hotkey {
         hotkey::register(&app, &config.hotkey, Some(&old.hotkey))?;
     }
+    // Windows' startup entry follows the choice. If Windows refuses, nothing
+    // else is saved, so the window and the entry never disagree.
+    let new_startup = config.start_with_windows != old.start_with_windows;
+    if new_startup && let Err(e) = startup::apply(&config) {
+        if new_hotkey {
+            let _ = hotkey::register(&app, &old.hotkey, None);
+        }
+        return Err(e);
+    }
     // Write before adopting: if the file can't be written (a syntax error in
     // bloom.toml, a read-only folder), the running app must not behave like the
     // new settings were saved.
     if let Err(e) = config::save(&state.paths, &config) {
         if new_hotkey {
             let _ = hotkey::register(&app, &old.hotkey, None);
+        }
+        if new_startup {
+            let _ = startup::apply(&old);
         }
         return Err(e.to_string());
     }

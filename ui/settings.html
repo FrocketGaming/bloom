@@ -28,6 +28,15 @@
   </aside>
 
   <main class="main">
+    <!-- Asked once, of installs that were made before the setting existed. -->
+    <div id="startup-offer" class="offer" hidden role="region" aria-label="Start with Windows">
+      <p><strong>Start Bloom with Windows?</strong> Bloom doesn't start when you sign in, so your snippets stop working after a restart until you open it. You can change this any time in Settings.</p>
+      <div class="offer-actions">
+        <button id="offer-yes" class="btn primary" type="button">Yes, start with Windows</button>
+        <button id="offer-no" class="btn" type="button">No, thanks</button>
+      </div>
+      <p id="offer-error" class="status err" role="status"></p>
+    </div>
     <div id="errors" class="banner" hidden></div>
 
     <!-- Snippet editor -->
@@ -136,6 +145,14 @@
             <button type="button" data-v="off">Off</button>
           </div>
           <p class="hint">Bloom keeps a small record of how often and how recently you use each snippet, in <code>usage.toml</code>, and lists your favourites first in suggestions and in search. The record fades over a couple of weeks, so a new favourite takes over quickly. Turning this off stops the recording and goes back to the order in your files. Delete <code>usage.toml</code> to start over.</p>
+        </div>
+        <div class="fld">
+          <span>Start Bloom with Windows</span>
+          <div class="seg" id="startup" role="radiogroup">
+            <button type="button" data-v="on">On</button>
+            <button type="button" data-v="off">Off</button>
+          </div>
+          <p class="hint" id="startup-hint"></p>
         </div>
         <div class="fld">
           <span>Snippets folder</span>

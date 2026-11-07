@@ -662,6 +662,7 @@ function prettyHotkey(h) {
 
 function renderGeneral() {
   const c = settings.config;
+  renderStartup();
   $('hotkey').textContent = prettyHotkey(c.hotkey);
   $('inject').querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === c.inject)));
   $('inject-hint').textContent = INJECT_HINTS[c.inject];
@@ -673,6 +674,7 @@ function renderGeneral() {
   $('folder').textContent = settings.snippets_dir;
 }
 
+/** Saves a change to the settings. Returns null, or the reason it was refused. */
 async function saveConfig(patch) {
   const config = { ...settings.config, ...patch };
   try {
@@ -683,11 +685,44 @@ async function saveConfig(patch) {
     const errs = await invoke('get_settings');
     settings.errors = errs.errors;
     renderErrors();
+    return null;
   } catch (e) {
     renderGeneral();
     setStatus('gen-status', String(e), 'err');
+    return String(e);
   }
 }
+
+// Start with Windows has three states: on, off, and not decided yet (null),
+// which is what an install from before the setting existed has.
+const STARTUP_HINTS = {
+  on: 'Bloom starts in the tray when you sign in to Windows, so snippets work without opening it first. If it does not start, check that Bloom is switched on under Settings, Apps, Startup in Windows, which overrides this.',
+  off: 'Bloom starts only when you open it. Snippets do not expand until you do.',
+  undecided: 'Not decided yet: Bloom does not start with Windows until you choose.',
+};
+
+function renderStartup() {
+  const choice = settings.config.start_with_windows;
+  const key = choice === true ? 'on' : choice === false ? 'off' : 'undecided';
+  $('startup').querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === key)));
+  $('startup-hint').textContent = STARTUP_HINTS[key];
+  // The one-time question goes away as soon as it has an answer.
+  $('startup-offer').hidden = key !== 'undecided';
+}
+
+$('startup').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (b) saveConfig({ start_with_windows: b.dataset.v === 'on' });
+});
+
+async function answerStartupOffer(on) {
+  $('offer-error').textContent = '';
+  const problem = await saveConfig({ start_with_windows: on });
+  // A refusal has to be seen where the question was asked.
+  if (problem) $('offer-error').textContent = problem;
+}
+$('offer-yes').addEventListener('click', () => answerStartupOffer(true));
+$('offer-no').addEventListener('click', () => answerStartupOffer(false));
 
 $('inject').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]');
