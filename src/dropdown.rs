@@ -174,6 +174,7 @@ fn render(app: &AppHandle, state: &AppState, menu: &Menu) {
     };
 
     let store = state.store.read().unwrap();
+    let variables = state.variables.read().unwrap();
     let mut rows = Vec::new();
     let mut preview = String::new();
     for (index, id) in menu.ids.iter().enumerate() {
@@ -186,10 +187,12 @@ fn render(app: &AppHandle, state: &AppState, menu: &Menu) {
         rows.push(Row {
             trigger: snippet.trigger.clone().unwrap_or_default(),
             name: snippet.name.clone(),
-            form: !template::fields(&template::parse(&snippet.body)).is_empty(),
+            form: !template::fields(&template::parse_resolved(&snippet.body, &variables))
+                .is_empty(),
         });
     }
     drop(store);
+    drop(variables);
 
     let scale = monitor.scale_factor();
     let height = LIST_PADDING + ROW_HEIGHT * rows.len() as f64 + PREVIEW_HEIGHT;

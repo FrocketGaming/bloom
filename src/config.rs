@@ -144,6 +144,9 @@ pub struct Paths {
     pub root: PathBuf,
     pub config_file: PathBuf,
     pub snippets_dir: PathBuf,
+    /// Beside `bloom.toml`, not in the snippets folder, which reads every
+    /// `.toml` file in it as snippets.
+    pub variables_file: PathBuf,
 }
 
 impl Paths {
@@ -154,6 +157,7 @@ impl Paths {
         Self {
             config_file: root.join("bloom.toml"),
             snippets_dir: root.join("snippets"),
+            variables_file: root.join("variables.toml"),
             root,
         }
     }
@@ -223,6 +227,7 @@ mod tests {
         Paths {
             config_file: root.join("bloom.toml"),
             snippets_dir: root.join("snippets"),
+            variables_file: root.join("variables.toml"),
             root,
         }
     }

@@ -124,7 +124,7 @@ fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit, restore: Option<Stri
     let Some(snippet) = state.store.read().unwrap().get(&hit.id).cloned() else {
         return;
     };
-    let segs = template::parse(&snippet.body);
+    let segs = template::parse_resolved(&snippet.body, &state.variables.read().unwrap());
 
     platform::wait_for_typing_to_settle();
     platform::backspace(hit.delete);

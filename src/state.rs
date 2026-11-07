@@ -1,5 +1,6 @@
 use crate::config::{Config, Paths};
 use crate::snippets::Store;
+use crate::variables::Variables;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, RwLock};
 
@@ -18,6 +19,7 @@ pub struct AppState {
     pub config: RwLock<Config>,
     pub config_error: RwLock<Option<String>>,
     pub store: RwLock<Store>,
+    pub variables: RwLock<Variables>,
     pub paused: AtomicBool,
     /// The window that was active before the palette opened; text goes back there.
     pub prev_window: Mutex<Option<isize>>,
@@ -28,5 +30,10 @@ impl AppState {
     pub fn reload_snippets(&self) {
         let store = Store::load(&self.paths.snippets_dir);
         *self.store.write().unwrap() = store;
+    }
+
+    pub fn reload_variables(&self) {
+        let variables = Variables::load(&self.paths.variables_file);
+        *self.variables.write().unwrap() = variables;
     }
 }

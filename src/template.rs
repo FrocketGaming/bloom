@@ -1,5 +1,6 @@
 //! Snippet bodies: `{{date}}`, `{{time}}`, `{{clipboard}}`, `{{cursor}}`, `{{field:Label|opt|opt}}`.
 
+use crate::variables::{Content, Variables};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::Write;
@@ -7,9 +8,27 @@ use std::fmt::Write;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Seg {
     Text(String),
-    Var { name: String, arg: Option<String> },
-    Field { label: String, options: Vec<String> },
+    Var {
+        name: String,
+        arg: Option<String>,
+    },
+    Field {
+        label: String,
+        options: Vec<String>,
+    },
     Cursor,
+    /// `{{var:name}}` before the variable is looked up. If no variable has
+    /// that name it stays as typed, so `raw` is exactly what was written.
+    UserVar {
+        name: String,
+        raw: String,
+    },
+    /// A text variable, looked up. Inserted exactly as written: placeholders
+    /// inside it are not expanded.
+    Value {
+        name: String,
+        text: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -47,6 +66,10 @@ pub fn parse(body: &str) -> Vec<Seg> {
         let seg = match name.as_str() {
             "date" | "time" | "clipboard" => Some(Seg::Var { name, arg }),
             "cursor" => Some(Seg::Cursor),
+            "var" => arg.filter(|a| !a.is_empty()).map(|name| Seg::UserVar {
+                name,
+                raw: rest[open..open + 4 + close].to_string(),
+            }),
             "field" => arg.filter(|a| !a.is_empty()).map(|a| {
                 let mut parts = a.split('|').map(|p| p.trim().to_string());
                 let label = parts.next().unwrap_or_default();
@@ -75,6 +98,55 @@ pub fn parse(body: &str) -> Vec<Seg> {
         segs.push(Seg::Text(text));
     }
     segs
+}
+
+/// Looks up every `{{var:name}}`. A text variable becomes its value and a list
+/// becomes a pick-one field labelled with the variable's name. A name that no
+/// variable has stays as typed.
+pub fn resolve(segs: &[Seg], variables: &Variables) -> Vec<Seg> {
+    segs.iter()
+        .map(|seg| match seg {
+            Seg::UserVar { name, .. } => match variables.get(name) {
+                Some(variable) => match &variable.content {
+                    Content::Text(text) => Seg::Value {
+                        name: variable.name.clone(),
+                        text: text.clone(),
+                    },
+                    // The label is the name as defined, so `{{var:Signoff}}` and
+                    // `{{var:signoff}}` are asked for once.
+                    Content::Choices(options) => Seg::Field {
+                        label: variable.name.clone(),
+                        options: options.clone(),
+                    },
+                },
+                None => seg.clone(),
+            },
+            other => other.clone(),
+        })
+        .collect()
+}
+
+/// Parses a body and looks up its variables in one go.
+pub fn parse_resolved(body: &str, variables: &Variables) -> Vec<Seg> {
+    resolve(&parse(body), variables)
+}
+
+/// Every name used as `{{var:name}}` in unresolved segments, in order of first use.
+pub fn variable_names(segs: &[Seg]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for seg in segs {
+        if let Seg::UserVar { name, .. } = seg {
+            if !out.iter().any(|n| n.eq_ignore_ascii_case(name)) {
+                out.push(name.clone());
+            }
+        }
+    }
+    out
+}
+
+/// The names that no variable has. Only unresolved names survive `resolve`.
+pub fn missing(resolved: &[Seg]) -> Vec<String> {
+    variable_names(resolved)
 }
 
 pub fn fields(segs: &[Seg]) -> Vec<FieldSpec> {
@@ -143,6 +215,8 @@ pub fn render(segs: &[Seg], values: &HashMap<String, String>) -> Rendered {
                     cursor_at = Some(text.chars().count());
                 }
             }
+            Seg::Value { text: value, .. } => text.push_str(value),
+            Seg::UserVar { raw, .. } => text.push_str(raw),
         }
     }
     let total = text.chars().count();
@@ -184,6 +258,20 @@ pub fn preview(segs: &[Seg], clipboard: Option<&str>) -> Vec<Part> {
                 kind: "cursor",
                 text: String::new(),
             },
+            Seg::Value { name, text } => Part {
+                kind: "var",
+                text: if text.is_empty() {
+                    format!("({name} is empty)")
+                } else if text.chars().count() > 120 {
+                    text.chars().take(120).collect::<String>() + "…"
+                } else {
+                    text.clone()
+                },
+            },
+            Seg::UserVar { raw, .. } => Part {
+                kind: "missing",
+                text: raw.clone(),
+            },
         })
         .collect()
 }
@@ -216,6 +304,139 @@ mod tests {
     #[test]
     fn unclosed_braces_are_text() {
         assert_eq!(parse("a {{date"), vec![Seg::Text("a {{date".into())]);
+    }
+
+    fn variables() -> Variables {
+        use crate::variables::Variable;
+        Variables {
+            list: vec![
+                Variable {
+                    name: "Email".into(),
+                    content: Content::Text("sam@example.com".into()),
+                },
+                Variable {
+                    name: "address".into(),
+                    content: Content::Text("1 Main St\nTown".into()),
+                },
+                Variable {
+                    name: "note".into(),
+                    content: Content::Text("send {{date}} and {{field:Name}}".into()),
+                },
+                Variable {
+                    name: "signoff".into(),
+                    content: Content::Choices(vec!["Best".into(), "Cheers".into()]),
+                },
+            ],
+            errors: Vec::new(),
+        }
+    }
+
+    fn render_with(body: &str, values: &[(&str, &str)]) -> String {
+        let segs = parse_resolved(body, &variables());
+        let values = values
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        render(&segs, &values).text
+    }
+
+    #[test]
+    fn a_text_variable_is_inserted_as_written() {
+        assert_eq!(
+            render_with("Mail {{var:email}}.", &[]),
+            "Mail sam@example.com."
+        );
+        assert_eq!(render_with("{{var:address}}", &[]), "1 Main St\nTown");
+    }
+
+    #[test]
+    fn variable_names_ignore_case_and_spacing() {
+        let expected = "sam@example.com";
+        assert_eq!(render_with("{{var:EMAIL}}", &[]), expected);
+        assert_eq!(render_with("{{ var : email }}", &[]), expected);
+        assert_eq!(render_with("{{VAR:Email}}", &[]), expected);
+    }
+
+    #[test]
+    fn placeholders_inside_a_text_variable_are_not_expanded() {
+        let segs = parse_resolved("{{var:note}}", &variables());
+        assert!(fields(&segs).is_empty(), "no field is created from a value");
+        assert_eq!(
+            render(&segs, &HashMap::new()).text,
+            "send {{date}} and {{field:Name}}"
+        );
+    }
+
+    #[test]
+    fn a_list_variable_becomes_one_pick_one_field() {
+        let segs = parse_resolved("{{var:signoff}} / {{var:SignOff}}", &variables());
+        let f = fields(&segs);
+        assert_eq!(f.len(), 1, "asked for once, however it is spelled");
+        assert_eq!(f[0].label, "signoff");
+        assert_eq!(f[0].options, vec!["Best", "Cheers"]);
+        assert_eq!(
+            render_with("{{var:signoff}}!", &[("signoff", "Cheers")]),
+            "Cheers!"
+        );
+    }
+
+    #[test]
+    fn an_undefined_variable_stays_as_typed_and_is_reported() {
+        let segs = parse_resolved(
+            "Hi {{var:Emial}} and {{var:emial}} and {{var:email}}",
+            &variables(),
+        );
+        assert_eq!(
+            render(&segs, &HashMap::new()).text,
+            "Hi {{var:Emial}} and {{var:emial}} and sam@example.com"
+        );
+        assert_eq!(
+            missing(&segs),
+            vec!["Emial"],
+            "reported once, ignoring case"
+        );
+        assert!(missing(&parse_resolved("{{var:email}}", &variables())).is_empty());
+    }
+
+    #[test]
+    fn an_empty_variable_name_is_plain_text() {
+        assert_eq!(render_with("a {{var:}} b", &[]), "a {{var:}} b");
+        assert!(missing(&parse("{{var:}}")).is_empty());
+    }
+
+    #[test]
+    fn the_cursor_marker_counts_variable_text() {
+        let segs = parse_resolved("{{var:address}}{{cursor}}!", &variables());
+        assert_eq!(render(&segs, &HashMap::new()).cursor_back, 1);
+        let segs = parse_resolved("{{cursor}}{{var:address}}", &variables());
+        assert_eq!(
+            render(&segs, &HashMap::new()).cursor_back,
+            "1 Main St\nTown".chars().count()
+        );
+    }
+
+    #[test]
+    fn preview_marks_values_fields_and_missing_names() {
+        let segs = parse_resolved("{{var:email}} {{var:signoff}} {{var:nope}}", &variables());
+        let parts = preview(&segs, None);
+        assert_eq!(
+            (parts[0].kind, parts[0].text.as_str()),
+            ("var", "sam@example.com")
+        );
+        assert_eq!(
+            (parts[2].kind, parts[2].text.as_str()),
+            ("field", "signoff")
+        );
+        assert_eq!(
+            (parts[4].kind, parts[4].text.as_str()),
+            ("missing", "{{var:nope}}")
+        );
+    }
+
+    #[test]
+    fn without_a_lookup_a_variable_renders_as_typed() {
+        let segs = parse("{{var:email}}");
+        assert_eq!(render(&segs, &HashMap::new()).text, "{{var:email}}");
     }
 
     #[test]

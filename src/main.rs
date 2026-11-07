@@ -15,6 +15,7 @@ mod snippets;
 mod state;
 mod template;
 mod tray;
+mod variables;
 
 use state::AppState;
 use std::sync::atomic::AtomicBool;
@@ -29,11 +30,13 @@ fn main() {
     });
     let (config, config_error) = config::load(&paths);
     let store = snippets::Store::load(&paths.snippets_dir);
+    let variables = variables::Variables::load(&paths.variables_file);
     let state = Arc::new(AppState {
         paths,
         config: RwLock::new(config),
         config_error: RwLock::new(config_error),
         store: RwLock::new(store),
+        variables: RwLock::new(variables),
         paused: AtomicBool::new(false),
         prev_window: Mutex::new(None),
         pending_form: Mutex::new(None),
@@ -58,6 +61,8 @@ fn main() {
             commands::save_snippet,
             commands::delete_snippet,
             commands::open_snippets_folder,
+            commands::list_variables,
+            commands::save_variables,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
@@ -79,6 +84,16 @@ fn main() {
                 let _ = watch_handle.emit("snippets-changed", ());
             }) {
                 eprintln!("bloom: not watching snippet files: {e}");
+            }
+
+            // variables.toml sits in the settings folder, so watch that folder.
+            let vars_handle = handle.clone();
+            let vars_state = state.clone();
+            if let Err(e) = snippets::watch(&state.paths.root, move || {
+                vars_state.reload_variables();
+                let _ = vars_handle.emit("variables-changed", ());
+            }) {
+                eprintln!("bloom: not watching variables.toml: {e}");
             }
 
             engine::start(handle.clone(), state.clone());

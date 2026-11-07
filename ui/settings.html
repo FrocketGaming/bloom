@@ -19,7 +19,10 @@
     <nav id="tree" class="tree" aria-label="Snippets"></nav>
     <div class="side-foot">
       <label class="toggle"><input type="checkbox" id="paused"><span class="track"></span><span id="paused-label">Expanding</span></label>
-      <button id="nav-settings" class="link" type="button">Settings</button>
+      <div class="foot-links">
+        <button id="nav-variables" class="link" type="button">Variables</button>
+        <button id="nav-settings" class="link" type="button">Settings</button>
+      </div>
     </div>
   </aside>
 
@@ -55,6 +58,7 @@
               <button type="button" data-ins="{{clipboard}}">Clipboard</button>
               <button type="button" data-ins="{{cursor}}">Cursor</button>
               <button type="button" data-ins="{{field:Name}}">Fill-in field</button>
+              <select id="chip-var" aria-label="Insert a variable"><option value="">Variable…</option></select>
             </div>
           </div>
           <textarea id="ed-body" class="mono" spellcheck="false" placeholder="Best,&#10;Your Name"></textarea>
@@ -64,6 +68,24 @@
           <pre id="ed-preview"></pre>
         </div>
         <p class="status" id="ed-status" role="status"></p>
+      </div>
+    </section>
+
+    <!-- Variables -->
+    <section id="variables" class="view" hidden>
+      <header class="view-head">
+        <h1>Variables</h1>
+        <span id="vars-unsaved" class="unsaved" hidden>Unsaved changes</span>
+        <div class="head-actions">
+          <button id="vars-save" class="btn primary" type="button" title="Save (Ctrl+S)" disabled>Save</button>
+        </div>
+      </header>
+      <div class="form">
+        <p class="hint">Define something once and use it in any snippet as <code>{{var:name}}</code>. Text is inserted exactly as written. A list of choices asks you to pick one when the snippet is used. Names ignore case.</p>
+        <div id="vars-undefined" class="notice" hidden></div>
+        <div id="vars-list" class="vars"></div>
+        <div><button id="vars-add" class="btn" type="button">Add variable</button></div>
+        <p class="status" id="vars-status" role="status"></p>
       </div>
     </section>
 
