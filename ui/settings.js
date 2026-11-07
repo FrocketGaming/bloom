@@ -10,7 +10,45 @@ let settings = null;
 let current = null; // { id, file, index } of the snippet being edited, or null for a new one
 let view = 'editor';
 let dirty = false;
+let savedSnapshot = '';
+let savedFlashTimer = null;
 const NEW_FILE = '__new__';
+
+// ---------- Unsaved-changes tracking ----------
+
+function snapshot() {
+  return JSON.stringify([
+    $('ed-name').value, $('ed-trigger').value, $('ed-body').value, $('ed-word').checked,
+    current ? current.file : chosenFile(),
+  ]);
+}
+
+/** Call after loading or saving: the form now matches what's on disk. */
+function markClean() {
+  savedSnapshot = snapshot();
+  updateDirty();
+}
+
+/** Save is only active when the form differs from what's saved. */
+function updateDirty() {
+  dirty = snapshot() !== savedSnapshot;
+  const btn = $('save');
+  if (!btn.classList.contains('saved')) btn.disabled = !dirty;
+  $('ed-unsaved').hidden = !dirty;
+}
+
+function flashSaved() {
+  const btn = $('save');
+  clearTimeout(savedFlashTimer);
+  btn.classList.add('saved');
+  btn.disabled = true;
+  btn.textContent = '✓ Saved';
+  savedFlashTimer = setTimeout(() => {
+    btn.classList.remove('saved');
+    btn.textContent = 'Save';
+    updateDirty();
+  }, 1600);
+}
 
 // ---------- Loading ----------
 
@@ -90,7 +128,7 @@ function openSnippet(s) {
   $('ed-file').disabled = true; // moving between files isn't supported yet
   $('delete').hidden = false;
   setStatus('ed-status', '');
-  dirty = false;
+  markClean();
   showView('editor');
   updatePreview();
 }
@@ -107,7 +145,7 @@ function newSnippet() {
   $('ed-file').disabled = false;
   $('delete').hidden = true;
   setStatus('ed-status', '');
-  dirty = false;
+  markClean();
   showView('editor');
   updatePreview();
   $('ed-name').focus();
@@ -121,6 +159,7 @@ function onFileChange() {
   input.placeholder = 'work.toml';
   input.autocomplete = 'off';
   $('ed-file').replaceWith(input);
+  input.addEventListener('input', updateDirty);
   input.focus();
 }
 $('ed-file').addEventListener('change', onFileChange);
@@ -141,6 +180,7 @@ function restoreFileSelect() {
 }
 
 async function save() {
+  if (!dirty) return;
   const edit = {
     file: current ? current.file : chosenFile(),
     index: current ? current.index : null,
@@ -152,12 +192,11 @@ async function save() {
   if (!edit.file) { setStatus('ed-status', 'Name the new file, for example work.toml.', 'err'); return; }
   try {
     const id = await invoke('save_snippet', { edit });
-    dirty = false;
     restoreFileSelect();
     await loadAll();
     const s = snippets.find((x) => x.id === id);
     if (s) openSnippet(s);
-    setStatus('ed-status', 'Saved.', 'ok');
+    flashSaved();
   } catch (e) {
     setStatus('ed-status', String(e), 'err');
   }
@@ -182,8 +221,9 @@ $('delete').addEventListener('click', remove);
 $('new').addEventListener('click', newSnippet);
 
 for (const id of ['ed-name', 'ed-trigger', 'ed-body', 'ed-word']) {
-  $(id).addEventListener('input', () => { dirty = true; setStatus('ed-status', ''); });
+  $(id).addEventListener('input', () => { updateDirty(); setStatus('ed-status', ''); });
 }
+$('editor').addEventListener('change', (e) => { if (e.target.id === 'ed-file') updateDirty(); });
 $('ed-name').addEventListener('input', () => {
   $('ed-title').textContent = $('ed-name').value.trim() || $('ed-trigger').value.trim() || (current ? 'Untitled' : 'New snippet');
 });
@@ -201,7 +241,7 @@ $('chips').addEventListener('click', (e) => {
   // Select the label of a new field so it can be typed over.
   if (ins.startsWith('{{field:')) ta.setSelectionRange(start + 8, start + ins.length - 2);
   else ta.setSelectionRange(start + ins.length, start + ins.length);
-  dirty = true;
+  updateDirty();
   updatePreview();
 });
 

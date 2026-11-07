@@ -182,9 +182,10 @@ $('form-view').addEventListener('submit', async (e) => {
     $('f-prev').textContent = String(err);
   }
 });
-// Enter inside a <select> doesn't submit by default.
+// Submit on Enter from any field. Browsers only do this by themselves when a
+// form has exactly one text box, so snippets with several fields need it.
 $('fields').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.tagName === 'SELECT') { e.preventDefault(); $('form-view').requestSubmit(); }
+  if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('form-view').requestSubmit(); }
 });
 
 // ---------- Window ----------

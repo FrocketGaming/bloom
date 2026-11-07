@@ -13,6 +13,7 @@
   --accent-soft: rgba(194, 37, 92, .12);
   --danger: #b42318;
   --ok: #2f7d4f;
+  --ok-ink: #ffffff;
   --warn-bg: #fff4e5;
   --warn-ink: #7a4100;
   --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
@@ -24,7 +25,7 @@
     --bg: #1c191b; --side: #161415; --ink: #f2edf0; --muted: #a49aa0; --line: #322c30; --field: #242023;
     --hover: rgba(240, 101, 149, .08); --sel: rgba(240, 101, 149, .16); --chip: rgba(255, 255, 255, .07);
     --accent: #f06595; --accent-ink: #1a0b11; --accent-soft: rgba(240, 101, 149, .15);
-    --danger: #ff8a80; --ok: #6fcf97; --warn-bg: #3a2a12; --warn-ink: #ffd8a8;
+    --danger: #ff8a80; --ok: #6fcf97; --ok-ink: #0d2818; --warn-bg: #3a2a12; --warn-ink: #ffd8a8;
     color-scheme: dark;
   }
 }
@@ -86,6 +87,12 @@ button { font: inherit; color: inherit; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .btn.primary:hover { filter: brightness(1.06); }
 .btn.danger { color: var(--danger); }
+.btn:disabled { opacity: .4; cursor: default; filter: none; }
+.btn:disabled:hover { border-color: var(--line); }
+.btn.primary:disabled:hover { border-color: var(--accent); }
+.btn.saved, .btn.saved:disabled { opacity: 1; background: var(--ok); border-color: var(--ok); color: var(--ok-ink); }
+.unsaved { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.unsaved::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 
 .form { display: flex; flex-direction: column; gap: 16px; max-width: 860px; }
 .form.narrow { max-width: 560px; gap: 22px; }
