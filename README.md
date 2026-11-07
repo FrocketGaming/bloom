@@ -150,6 +150,15 @@ Type a trigger's symbol and the next two characters (`;si`) and a small list ope
 - **Never shown** in password fields, while Bloom is paused, or in Bloom's own windows.
 - **To turn it off,** use **Suggestions while typing** under **Settings**, or set `suggestions = false` in `bloom.toml`.
 
+## Appearance
+
+Open **Settings** in the Bloom window and use **Appearance** and **Accent color**. Changes apply to every Bloom window straight away, with no restart.
+
+- **Mode:** **System** follows your Windows light or dark setting (the default), or force **Light** or **Dark**. The title bar and the frosted search window follow too.
+- **Accent color:** pink (the original look and the default), blue, green, purple, orange, teal, or **Custom**. The accent colors buttons, switches, highlights, selected rows and links in the Bloom window, the search window, the suggestion list and the dialogs.
+- **Custom colors** are picked with the color picker or typed as a hex code such as `#3b82f6`. A color that looks fine on a light background is often unreadable on a dark one, so Bloom nudges its lightness for each theme until text in it has enough contrast, and picks white or dark text for the labels on filled buttons. The page shows the colors it will really use. A color that needs no change is used exactly as picked.
+- **In `bloom.toml`:** `theme = "system"`, `"light"` or `"dark"`; `accent = "pink"`, `"blue"`, `"green"`, `"purple"`, `"orange"`, `"teal"` or `"custom"`; and `accent_color = "#3b82f6"` for the custom color.
+
 ## Using two computers (Mouse Without Borders)
 
 Bloom only reacts to keys that actually reach an app on the PC it runs on. With [Mouse Without Borders](https://learn.microsoft.com/windows/powertoys/mouse-without-borders) sharing one keyboard between PCs:

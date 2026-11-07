@@ -663,6 +663,7 @@ function prettyHotkey(h) {
 function renderGeneral() {
   const c = settings.config;
   renderStartup();
+  renderAppearance();
   $('hotkey').textContent = prettyHotkey(c.hotkey);
   $('inject').querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === c.inject)));
   $('inject-hint').textContent = INJECT_HINTS[c.inject];
@@ -692,6 +693,92 @@ async function saveConfig(patch) {
     return String(e);
   }
 }
+
+// ---------- Appearance ----------
+
+let presets = null; // the ready-made accents, asked for once
+
+function swatch(id, label, color, selected) {
+  const b = el('button', { type: 'button', className: id === 'custom' ? 'swatch custom' : 'swatch', title: label });
+  b.dataset.id = id;
+  b.setAttribute('role', 'radio');
+  b.setAttribute('aria-label', label);
+  b.setAttribute('aria-checked', String(selected));
+  if (color) b.style.setProperty('--sw', color);
+  return b;
+}
+
+/** `#rgb`, `#rrggbb`, with or without the `#`, as `#rrggbb`; or null. */
+function normaliseHex(text) {
+  const t = text.trim().replace(/^#/, '').toLowerCase();
+  if (/^[0-9a-f]{3}$/.test(t)) return `#${[...t].map((c) => c + c).join('')}`;
+  if (/^[0-9a-f]{6}$/.test(t)) return `#${t}`;
+  return null;
+}
+
+/** Shows how a custom colour will really look once adjusted for readability. */
+async function showAccentPreview(hex) {
+  const out = $('accent-preview');
+  try {
+    const { light, dark } = await invoke('preview_accent', { color: hex });
+    const chip = (c) => `<span class="chip-swatch" style="background:${c}"></span>`;
+    out.innerHTML = light.accent === hex && dark.accent === hex
+      ? 'Used as it is in both themes.'
+      : `Shown as ${chip(light.accent)} ${light.accent} in the light theme and ${chip(dark.accent)} ${dark.accent} in the dark theme, so text stays readable.`;
+  } catch (e) {
+    out.textContent = '';
+  }
+}
+
+async function renderAppearance() {
+  const c = settings.config;
+  $('theme-mode').querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === c.theme)));
+  if (!presets) {
+    try { presets = (await invoke('get_theme')).presets; } catch { return; }
+  }
+  $('accent').replaceChildren(
+    ...presets.map((p) => swatch(p.id, p.label, p.swatch, c.accent === p.id)),
+    swatch('custom', 'Custom', null, c.accent === 'custom'),
+  );
+  const custom = c.accent === 'custom';
+  $('accent-custom').hidden = !custom;
+  if (custom) {
+    $('accent-picker').value = c.accent_color;
+    if (document.activeElement !== $('accent-hex')) $('accent-hex').value = c.accent_color;
+    showAccentPreview(c.accent_color);
+  }
+}
+
+$('theme-mode').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (b) saveConfig({ theme: b.dataset.v });
+});
+$('accent').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-id]');
+  if (b) saveConfig({ accent: b.dataset.id });
+});
+
+async function saveCustomColor(hex) {
+  $('accent-error').textContent = '';
+  const problem = await saveConfig({ accent: 'custom', accent_color: hex });
+  if (problem) $('accent-error').textContent = problem;
+}
+let pickTimer = null;
+$('accent-picker').addEventListener('input', () => {
+  // Dragging in the picker fires continuously; save once it settles.
+  const hex = $('accent-picker').value;
+  $('accent-hex').value = hex;
+  clearTimeout(pickTimer);
+  pickTimer = setTimeout(() => saveCustomColor(hex), 250);
+});
+$('accent-hex').addEventListener('change', () => {
+  const hex = normaliseHex($('accent-hex').value);
+  if (!hex) {
+    $('accent-error').textContent = 'Use a hex color such as #3b82f6.';
+    return;
+  }
+  saveCustomColor(hex);
+});
 
 // Start with Windows has three states: on, off, and not decided yet (null),
 // which is what an install from before the setting existed has.

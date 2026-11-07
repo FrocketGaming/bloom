@@ -105,6 +105,26 @@
       <header class="view-head"><h1>Settings</h1></header>
       <div class="form narrow">
         <div class="fld">
+          <span>Appearance</span>
+          <div class="seg" id="theme-mode" role="radiogroup" aria-label="Light or dark">
+            <button type="button" data-v="system">System</button>
+            <button type="button" data-v="light">Light</button>
+            <button type="button" data-v="dark">Dark</button>
+          </div>
+          <p class="hint">System follows your Windows light or dark setting. Light and dark apply to the Bloom window, the search window and the suggestion list.</p>
+        </div>
+        <div class="fld">
+          <span>Accent color</span>
+          <div class="swatches" id="accent" role="radiogroup" aria-label="Accent color"></div>
+          <div class="custom-color" id="accent-custom" hidden>
+            <input type="color" id="accent-picker" aria-label="Pick a custom color">
+            <input id="accent-hex" class="mono" maxlength="7" spellcheck="false" autocomplete="off" aria-label="Custom color as a hex code" placeholder="#3b82f6">
+            <p class="hint" id="accent-preview"></p>
+            <p class="status err" id="accent-error" role="status"></p>
+          </div>
+          <p class="hint">The accent colors buttons, switches, highlights and links. Bloom adjusts a custom color slightly for each theme, so text in it stays readable.</p>
+        </div>
+        <div class="fld">
           <span>Search hotkey</span>
           <div class="hotkey-row">
             <button id="hotkey" class="hotkey" type="button" title="Click, then press a key combination"></button>
