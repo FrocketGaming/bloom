@@ -1,0 +1,100 @@
+/* The window itself is blurred (Acrylic); these tints sit on top of it. */
+:root {
+  --tint: rgba(250, 248, 249, .72);
+  --ink: #1d181b;
+  --muted: #6a6065;
+  --line: rgba(30, 20, 25, .09);
+  --sel: rgba(194, 37, 92, .12);
+  --chip: rgba(30, 20, 25, .065);
+  --accent: #c2255c;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(194, 37, 92, .11);
+  --field: rgba(255, 255, 255, .7);
+  --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tint: rgba(34, 30, 33, .7);
+    --ink: #f4eff2;
+    --muted: #a99fa4;
+    --line: rgba(255, 255, 255, .08);
+    --sel: rgba(240, 101, 149, .18);
+    --chip: rgba(255, 255, 255, .08);
+    --accent: #f06595;
+    --accent-ink: #1a0b11;
+    --accent-soft: rgba(240, 101, 149, .15);
+    --field: rgba(0, 0, 0, .22);
+    color-scheme: dark;
+  }
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; background: transparent; overflow: hidden; }
+body { font: 14px/1.45 var(--ui); color: var(--ink); user-select: none; -webkit-user-select: none; }
+[hidden] { display: none !important; }
+
+/* The window is resized to fit this element, so it must not stretch to the window. */
+.pal { display: flex; flex-direction: column; }
+html { background: var(--tint); }
+
+/* Search row */
+.search { display: flex; align-items: center; gap: 12px; height: 58px; padding: 0 16px 0 18px; border-bottom: 1px solid var(--line); }
+.search svg { width: 20px; height: 20px; color: var(--muted); flex: none; }
+.search input {
+  flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--ink);
+  font: 19px/1 var(--ui);
+}
+.search input::placeholder { color: var(--muted); }
+
+kbd {
+  font: 500 11px/1 var(--ui); padding: 4px 6px; border-radius: 5px; border: 1px solid var(--line);
+  background: var(--chip); color: var(--muted); white-space: nowrap;
+}
+
+/* Results */
+.list { padding: 6px; max-height: 300px; overflow-y: auto; scrollbar-width: thin; }
+.row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 9px; cursor: default; min-width: 0; }
+.row.sel { background: var(--sel); }
+.row .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
+.row .grp { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.row .form-tag { font-size: 11px; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+.trig {
+  font: 500 12.5px/1 var(--mono); padding: 4px 7px; border-radius: 5px; background: var(--chip); color: var(--ink);
+  white-space: nowrap; min-width: 52px; text-align: center;
+}
+.trig.none { color: var(--muted); font-family: var(--ui); font-size: 11.5px; }
+.row.sel .trig:not(.none) { background: var(--accent); color: var(--accent-ink); }
+mark { background: none; color: var(--accent); font-weight: 600; }
+.row.sel .trig mark { color: inherit; }
+.empty { padding: 18px 14px; color: var(--muted); }
+
+/* Preview strip */
+.prev { border-top: 1px solid var(--line); padding: 12px 18px 14px; display: flex; flex-direction: column; gap: 7px; }
+.prev-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.prev-body { font: 13.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; margin: 0; max-height: 92px; overflow: hidden; }
+.var { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
+.field { border-bottom: 1.5px dashed var(--accent); color: var(--accent); }
+.field.filled { border-bottom-style: solid; }
+.cur { display: inline-block; width: 2px; height: 1.1em; background: var(--accent); vertical-align: text-bottom; margin: 0 1px; }
+
+/* Form mode */
+.form-head { display: flex; align-items: center; gap: 12px; height: 54px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+.form-head h1 { flex: 1; min-width: 0; margin: 0; font: 600 16px/1.2 var(--ui); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.form-head .count { color: var(--muted); font-size: 12.5px; }
+.fields { display: grid; grid-template-columns: minmax(90px, max-content) 1fr; gap: 10px 14px; padding: 14px 18px; align-items: center; }
+.fields label { font-size: 13px; color: var(--muted); }
+.fields input, .fields select {
+  font: 14px/1.2 var(--ui); color: var(--ink); background: var(--field); border: 1px solid var(--line);
+  border-radius: 7px; padding: 8px 10px; outline: none; width: 100%; min-width: 0; user-select: text;
+}
+.fields input:focus, .fields select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.form-prev .prev-body { max-height: 120px; }
+.foot { display: flex; gap: 16px; align-items: center; padding: 9px 18px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
+.foot span { display: inline-flex; gap: 6px; align-items: center; }
+.foot .r { margin-left: auto; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .pal { animation: in .12s ease-out; }
+  @keyframes in { from { opacity: .4; } to { opacity: 1; } }
+}

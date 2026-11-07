@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Bloom search</title>
+<link rel="stylesheet" href="palette.css">
+</head>
+<body>
+  <main class="pal" id="pal">
+    <!-- Search mode -->
+    <section id="search-view">
+      <div class="search">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="8.5" cy="8.5" r="6" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M13 13l5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        <input id="q" autocomplete="off" spellcheck="false" placeholder="Search snippets" aria-label="Search snippets">
+        <kbd>Esc</kbd>
+      </div>
+      <div class="list" id="list" role="listbox" aria-label="Snippets"></div>
+      <div class="prev" id="prev"></div>
+    </section>
+
+    <!-- Form mode: fill in {{field:…}} values -->
+    <form id="form-view" hidden>
+      <header class="form-head">
+        <span class="trig" id="f-trig"></span>
+        <h1 id="f-name"></h1>
+        <span class="count" id="f-count"></span>
+      </header>
+      <div class="fields" id="fields"></div>
+      <div class="prev form-prev">
+        <div class="prev-label">Inserts</div>
+        <pre class="prev-body" id="f-prev"></pre>
+      </div>
+      <footer class="foot">
+        <span><kbd>↵</kbd>Insert</span>
+        <span><kbd>Tab</kbd>Next field</span>
+        <span class="r"><kbd>Esc</kbd>Cancel</span>
+      </footer>
+    </form>
+  </main>
+  <script src="palette.js"></script>
+</body>
+</html>

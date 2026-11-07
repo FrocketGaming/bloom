@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Bloom's own windows: listen to app events and call Bloom commands.",
+  "windows": ["palette", "settings"],
+  "permissions": ["core:default"]
+}

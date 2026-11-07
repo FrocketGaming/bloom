@@ -1,0 +1,10 @@
+//! OS-specific pieces: listening to keys, typing text, and window focus.
+//! Only Windows is implemented. macOS/Linux go in sibling modules exposing the same functions.
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use self::windows::*;
+
+#[cfg(not(windows))]
+compile_error!("Bloom currently supports Windows only.");
