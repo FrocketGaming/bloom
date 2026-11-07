@@ -1,4 +1,4 @@
-//! Connects the keyboard hook, the matcher and text insertion.
+//! Connects keyboard listening, the matcher and text insertion.
 
 use crate::config::InjectMode;
 use crate::matcher::{Hit, Matcher};
@@ -14,7 +14,7 @@ use tauri::AppHandle;
 
 pub fn start(app: AppHandle, state: Arc<AppState>) {
     let (tx, rx) = mpsc::channel();
-    platform::start_hook(tx);
+    platform::start_listener(tx);
 
     thread::Builder::new()
         .name("bloom-engine".into())
@@ -47,7 +47,7 @@ fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit) {
     };
     let segs = template::parse(&snippet.body);
 
-    platform::wait_for_modifiers_released();
+    platform::wait_for_typing_to_settle();
     platform::backspace(hit.delete);
 
     if !template::fields(&segs).is_empty() {
@@ -86,9 +86,15 @@ pub fn deliver(state: &AppState, text: &str, trailing: &str, cursor_back: usize)
     let paste = match mode {
         InjectMode::Keys => false,
         InjectMode::Clipboard => true,
-        InjectMode::Auto => full.contains('\n') || full.chars().count() > threshold,
+        // Paste long or multi-line text, and anything with characters the
+        // keyboard layout has no key for (¯, ツ, emoji).
+        InjectMode::Auto => {
+            full.contains('\n')
+                || full.chars().count() > threshold
+                || !platform::can_type_as_keys(&full)
+        }
     };
-    platform::wait_for_modifiers_released();
+    platform::wait_for_typing_to_settle();
     if paste {
         platform::paste_text(&full);
     } else {
@@ -115,7 +121,7 @@ pub fn close_palette(state: &Arc<AppState>) {
             return;
         }
         thread::sleep(Duration::from_millis(90));
-        platform::wait_for_modifiers_released();
+        platform::wait_for_typing_to_settle();
         platform::type_text(&restore);
     });
 }
