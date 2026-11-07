@@ -558,6 +558,32 @@ pub fn focus_window(hwnd: isize) {
     }
 }
 
+/// Marks a window as one that never takes focus and stays above others, so
+/// the app being typed into keeps its text cursor.
+pub fn make_non_activating(hwnd: isize) {
+    unsafe {
+        let target = hwnd as HWND;
+        let style = GetWindowLongPtrW(target, GWL_EXSTYLE);
+        let wanted = (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST) as isize;
+        SetWindowLongPtrW(target, GWL_EXSTYLE, style | wanted);
+    }
+}
+
+/// Moves, resizes and shows a window in screen pixels without activating it.
+pub fn place_without_activating(hwnd: isize, x: i32, y: i32, width: i32, height: i32) {
+    unsafe {
+        SetWindowPos(
+            hwnd as HWND,
+            HWND_TOPMOST,
+            x,
+            y,
+            width,
+            height,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        );
+    }
+}
+
 /// Windows 11 rounded corners for a borderless window.
 pub fn round_corners(hwnd: isize) {
     let pref = DWMWCP_ROUND;

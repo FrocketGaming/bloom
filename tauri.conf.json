@@ -27,6 +27,23 @@
         "windowEffects": { "effects": ["acrylic"] }
       },
       {
+        "label": "dropdown",
+        "title": "Bloom suggestions",
+        "url": "dropdown.html",
+        "width": 300,
+        "height": 160,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "visible": false,
+        "focus": false,
+        "focusable": false,
+        "shadow": true,
+        "windowEffects": { "effects": ["acrylic"] }
+      },
+      {
         "label": "settings",
         "title": "Bloom",
         "url": "settings.html",
