@@ -32,6 +32,10 @@ pub struct Config {
     pub undo_with_backspace: bool,
     /// Remember which snippets are used most and list them first.
     pub rank_by_use: bool,
+    /// Start Bloom when Windows starts. `None` means not decided yet, which is
+    /// what a `bloom.toml` from before the setting existed has: the Bloom window
+    /// asks once. A new install is written with it on.
+    pub start_with_windows: Option<bool>,
 }
 
 impl Default for Config {
@@ -43,6 +47,7 @@ impl Default for Config {
             suggestions: true,
             undo_with_backspace: true,
             rank_by_use: true,
+            start_with_windows: None,
         }
     }
 }
@@ -72,6 +77,10 @@ undo_with_backspace = true
 # Keep a record of how often and how recently you use each snippet (in
 # usage.toml) and list the ones you use most first, in suggestions and in search.
 rank_by_use = true
+
+# Start Bloom when Windows starts, so snippets work without opening it first.
+# Leave this out and the Bloom window asks once.
+start_with_windows = true
 "#;
 
 const DEFAULT_SNIPPETS: &str = r#"# Your snippets. Bloom reloads this folder as soon as you save a file.
@@ -233,6 +242,13 @@ pub fn save(paths: &Paths, config: &Config) -> Result<()> {
     doc["suggestions"] = toml_edit::value(config.suggestions);
     doc["undo_with_backspace"] = toml_edit::value(config.undo_with_backspace);
     doc["rank_by_use"] = toml_edit::value(config.rank_by_use);
+    // Not decided yet is the absence of the key, so it is never written as one.
+    match config.start_with_windows {
+        Some(on) => doc["start_with_windows"] = toml_edit::value(on),
+        None => {
+            doc.remove("start_with_windows");
+        }
+    }
     crate::files::write_atomic(&paths.config_file, &doc.to_string())?;
     Ok(())
 }
@@ -364,6 +380,54 @@ mod tests {
             loaded.undo_with_backspace && loaded.suggestions,
             "other settings are untouched"
         );
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn starting_with_windows_is_undecided_for_older_files_and_on_for_a_new_one() {
+        // A bloom.toml written before the setting existed has no such key.
+        assert_eq!(Config::default().start_with_windows, None);
+        let paths = temp_paths("startup-older");
+        fs::write(&paths.config_file, "hotkey = \"Ctrl+Shift+Space\"\n").unwrap();
+        let (config, error) = load(&paths);
+        assert!(error.is_none());
+        assert_eq!(config.start_with_windows, None);
+        fs::remove_dir_all(&paths.root).ok();
+
+        // A new install starts with it on.
+        let starter: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+        assert_eq!(starter.start_with_windows, Some(true));
+    }
+
+    #[test]
+    fn the_start_with_windows_choice_is_saved_and_read_back() {
+        let paths = temp_paths("startup-choice");
+        for choice in [Some(true), Some(false)] {
+            let config = Config {
+                start_with_windows: choice,
+                ..Config::default()
+            };
+            save(&paths, &config).unwrap();
+            let loaded = load(&paths).0;
+            assert_eq!(loaded.start_with_windows, choice);
+            assert!(loaded.rank_by_use, "other settings are untouched");
+        }
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn undecided_is_never_written_and_clears_an_earlier_choice() {
+        let paths = temp_paths("startup-undecided");
+        fs::write(
+            &paths.config_file,
+            "# mine\nhotkey = \"Ctrl+Shift+Space\"\nstart_with_windows = true\n",
+        )
+        .unwrap();
+        save(&paths, &Config::default()).unwrap();
+        let text = fs::read_to_string(&paths.config_file).unwrap();
+        assert!(!text.contains("start_with_windows"), "{text}");
+        assert!(text.contains("# mine"), "comments are kept");
+        assert_eq!(load(&paths).0.start_with_windows, None);
         fs::remove_dir_all(&paths.root).ok();
     }
 
