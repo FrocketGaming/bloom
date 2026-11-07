@@ -24,6 +24,9 @@ pub struct Config {
     pub inject: InjectMode,
     /// In `auto` mode, expansions longer than this are pasted.
     pub clipboard_threshold: usize,
+    /// Show a short list of matching snippets at the text cursor while a
+    /// trigger is being typed.
+    pub suggestions: bool,
 }
 
 impl Default for Config {
@@ -32,6 +35,7 @@ impl Default for Config {
             hotkey: "Ctrl+Shift+Space".into(),
             inject: InjectMode::Auto,
             clipboard_threshold: 80,
+            suggestions: true,
         }
     }
 }
@@ -49,6 +53,10 @@ inject = "auto"
 
 # In "auto" mode, text longer than this many characters is pasted.
 clipboard_threshold = 80
+
+# Show a short list of matching snippets at your text cursor after you type the
+# first few characters of a trigger. Up/Down move, Enter or Tab inserts, Esc closes.
+suggestions = true
 "#;
 
 const DEFAULT_SNIPPETS: &str = r#"# Your snippets. Bloom reloads this folder as soon as you save a file.
@@ -200,6 +208,7 @@ pub fn save(paths: &Paths, config: &Config) -> Result<()> {
         InjectMode::Clipboard => "clipboard",
     });
     doc["clipboard_threshold"] = toml_edit::value(config.clipboard_threshold as i64);
+    doc["suggestions"] = toml_edit::value(config.suggestions);
     crate::files::write_atomic(&paths.config_file, &doc.to_string())?;
     Ok(())
 }
@@ -241,5 +250,35 @@ mod tests {
         assert!(text.contains("# keep me"));
         assert!(text.contains("clipboard_threshold"));
         fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn suggestions_are_on_by_default_and_for_older_files() {
+        assert!(Config::default().suggestions);
+        let paths = temp_paths("older");
+        // A bloom.toml written before the setting existed has no such key.
+        fs::write(&paths.config_file, "hotkey = \"Ctrl+Shift+Space\"\n").unwrap();
+        let (config, error) = load(&paths);
+        assert!(error.is_none());
+        assert!(config.suggestions);
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn turning_suggestions_off_is_saved_and_read_back() {
+        let paths = temp_paths("off");
+        let config = Config {
+            suggestions: false,
+            ..Config::default()
+        };
+        save(&paths, &config).unwrap();
+        assert!(!load(&paths).0.suggestions);
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn the_starter_file_documents_suggestions() {
+        let config: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+        assert!(config.suggestions);
     }
 }

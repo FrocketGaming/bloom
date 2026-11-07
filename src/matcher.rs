@@ -12,6 +12,32 @@ pub enum KeyEvent {
     Backspace,
     /// Anything that moves the cursor or changes focus: forget what was typed.
     Reset,
+    /// A key meant for the suggestion list. Only sent while the list is open.
+    Nav(Nav),
+}
+
+/// What a key does to the suggestion list.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Nav {
+    Up,
+    Down,
+    /// Enter or Tab: insert the highlighted snippet.
+    Accept,
+    /// Esc: close the list.
+    Close,
+}
+
+/// Fewest typed characters before suggestions appear: a symbol such as `;`
+/// plus two more.
+const MIN_SUGGEST: usize = 3;
+
+/// Snippets the text typed so far could still turn into.
+#[derive(Debug, PartialEq)]
+pub struct Suggestion {
+    /// What was typed, as the start of each suggested trigger.
+    pub text: String,
+    /// Matching snippets, ordered by trigger.
+    pub ids: Vec<String>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -62,6 +88,7 @@ impl Matcher {
                 self.reset();
                 None
             }
+            KeyEvent::Nav(_) => None,
             KeyEvent::Backspace => {
                 self.buf.pop();
                 if self
@@ -81,6 +108,39 @@ impl Matcher {
                 hit
             }
         }
+    }
+
+    /// The snippets to offer for what has been typed: triggers that begin with
+    /// a symbol, start at a word boundary, and have at least `MIN_SUGGEST`
+    /// characters typed but are not finished yet (a finished trigger expands
+    /// instead). Of the possible readings of the typed text, the longest wins.
+    pub fn suggest(&self, trigs: &[Trigger]) -> Option<Suggestion> {
+        let mut found: Vec<(usize, &Trigger)> = Vec::new();
+        for t in trigs {
+            if t.text.first().is_none_or(|c| c.is_alphanumeric()) {
+                continue;
+            }
+            for typed in (MIN_SUGGEST..t.text.len()).rev() {
+                let Some(start) = self.buf.len().checked_sub(typed) else {
+                    continue;
+                };
+                if self.buf[start..] == t.text[..typed] && self.boundary_ok(t, start) {
+                    found.push((typed, t));
+                    break;
+                }
+            }
+        }
+        let typed = found.iter().map(|(n, _)| *n).max()?;
+        let mut hits: Vec<&Trigger> = found
+            .into_iter()
+            .filter(|(n, _)| *n == typed)
+            .map(|(_, t)| t)
+            .collect();
+        hits.sort_by(|a, b| a.text.cmp(&b.text));
+        Some(Suggestion {
+            text: hits[0].text[..typed].iter().collect(),
+            ids: hits.iter().map(|t| t.id.clone()).collect(),
+        })
     }
 
     fn boundary_ok(&self, t: &Trigger, start: usize) -> bool {
@@ -277,5 +337,66 @@ mod tests {
         let hits = typed(&mut m, "!", &t);
         assert_eq!(hits[0].id, ";s");
         assert_eq!(hits[0].trailing, "!");
+    }
+
+    fn suggested(m: &Matcher, t: &[Trigger]) -> Vec<String> {
+        m.suggest(t).map(|s| s.ids).unwrap_or_default()
+    }
+
+    #[test]
+    fn suggests_after_a_symbol_and_two_letters() {
+        let t = vec![trig(";sig", true), trig(";shrug", true), trig(";fu", true)];
+        let mut m = Matcher::default();
+        typed(&mut m, ";s", &t);
+        assert!(suggested(&m, &t).is_empty());
+        typed(&mut m, "i", &t);
+        assert_eq!(suggested(&m, &t), vec![";sig"]);
+        // One more letter finishes the trigger, so it expands instead.
+        assert_eq!(typed(&mut m, "g", &t)[0].id, ";sig");
+        assert!(suggested(&m, &t).is_empty());
+    }
+
+    #[test]
+    fn lists_every_trigger_the_text_could_become() {
+        let t = vec![
+            trig(";shrug", true),
+            trig(";sig", true),
+            trig(";sign", true),
+        ];
+        let mut m = Matcher::default();
+        typed(&mut m, ";si", &t);
+        let s = m.suggest(&t).unwrap();
+        assert_eq!(s.text, ";si");
+        assert_eq!(s.ids, vec![";sig", ";sign"]);
+    }
+
+    #[test]
+    fn does_not_suggest_mid_word_or_for_plain_word_triggers() {
+        let t = vec![trig(";sig", true), trig("brb", true)];
+        let mut m = Matcher::default();
+        typed(&mut m, "x;si", &t);
+        assert!(suggested(&m, &t).is_empty());
+        m.reset();
+        typed(&mut m, "br", &t);
+        assert!(suggested(&m, &t).is_empty());
+    }
+
+    #[test]
+    fn suggests_mid_word_for_triggers_that_allow_it() {
+        let t = vec![trig(";sig", false)];
+        let mut m = Matcher::default();
+        typed(&mut m, "x;si", &t);
+        assert_eq!(suggested(&m, &t), vec![";sig"]);
+    }
+
+    #[test]
+    fn stops_suggesting_after_a_space_or_backspace() {
+        let t = vec![trig(";sig", true)];
+        let mut m = Matcher::default();
+        typed(&mut m, ";si", &t);
+        m.feed(KeyEvent::Backspace, &t);
+        assert!(suggested(&m, &t).is_empty());
+        typed(&mut m, "i ", &t);
+        assert!(suggested(&m, &t).is_empty());
     }
 }

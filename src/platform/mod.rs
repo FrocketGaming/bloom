@@ -2,9 +2,13 @@
 //! Only Windows is implemented. macOS/Linux go in sibling modules exposing the same functions.
 
 #[cfg(windows)]
+mod caret;
+#[cfg(windows)]
 mod password;
 #[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+pub use self::caret::{CaretPosition, caret_position, start_caret_probe};
 #[cfg(windows)]
 pub use self::password::{password_field_focused, start_password_watch};
 #[cfg(windows)]

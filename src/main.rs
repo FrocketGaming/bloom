@@ -3,6 +3,7 @@
 
 mod commands;
 mod config;
+mod dropdown;
 mod engine;
 mod files;
 mod hotkey;
@@ -61,6 +62,7 @@ fn main() {
         .setup(move |app| {
             let handle = app.handle().clone();
             palette::setup(&handle);
+            dropdown::setup(&handle);
             settings::setup(&handle);
             tray::build(&handle)?;
 

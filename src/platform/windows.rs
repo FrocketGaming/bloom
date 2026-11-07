@@ -1,4 +1,4 @@
-use crate::matcher::KeyEvent;
+use crate::matcher::{KeyEvent, Nav};
 use std::mem::{size_of, zeroed};
 use std::ptr::{null, null_mut};
 use std::sync::OnceLock;
@@ -35,6 +35,24 @@ static INPUT_BLOCKED: AtomicBool = AtomicBool::new(false);
 static HELD: [AtomicBool; 256] = [const { AtomicBool::new(false) }; 256];
 static LAST_INPUT_MS: AtomicU64 = AtomicU64::new(0);
 
+/// Until when (in `clock` milliseconds) the suggestion list owns the arrow keys,
+/// Enter, Tab and Esc. It expires by itself so that a stuck list can never
+/// leave those keys dead.
+static LIST_KEYS_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Keys whose press Bloom swallowed, so their release is swallowed too.
+static SWALLOWED: [AtomicBool; 256] = [const { AtomicBool::new(false) }; 256];
+
+/// How long the list keeps the keys without being refreshed.
+const LIST_KEYS_LEASE_MS: u64 = 30_000;
+
+/// While `on`, arrows, Enter, Tab and Esc go to the suggestion list instead of
+/// the app being typed into. Call again on each change to renew the lease.
+pub fn set_list_keys(on: bool) {
+    let until = if on { clock() + LIST_KEYS_LEASE_MS } else { 0 };
+    LIST_KEYS_UNTIL_MS.store(until, Ordering::Relaxed);
+}
+
 fn clock() -> u64 {
     static START: OnceLock<Instant> = OnceLock::new();
     START.get_or_init(Instant::now).elapsed().as_millis() as u64
@@ -58,7 +76,8 @@ fn clock() -> u64 {
 // Those count as typing: Bloom filters out only its own keys, by tag.
 
 /// Starts listening to the keyboard and mouse on a dedicated thread.
-/// Bloom never blocks or changes input; it passes every event along unchanged.
+/// Bloom passes every event along unchanged, except the few keys the open
+/// suggestion list takes (see `set_list_keys`).
 pub fn start_listener(tx: Sender<KeyEvent>) {
     let _ = EVENTS.set(tx);
     thread::Builder::new()
@@ -97,6 +116,15 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
             if k.dwExtraInfo != BLOOM_TAG {
                 HELD[(k.vkCode & 0xFF) as usize].store(down, Ordering::Relaxed);
                 LAST_INPUT_MS.store(clock(), Ordering::Relaxed);
+                let index = (k.vkCode & 0xFF) as usize;
+                if !down && SWALLOWED[index].swap(false, Ordering::Relaxed) {
+                    return 1;
+                }
+                if down && let Some(nav) = list_key(k.vkCode as VIRTUAL_KEY) {
+                    SWALLOWED[index].store(true, Ordering::Relaxed);
+                    emit(KeyEvent::Nav(nav));
+                    return 1;
+                }
                 if down && let Some(ev) = translate(k) {
                     emit(ev);
                 }
@@ -116,6 +144,24 @@ unsafe extern "system" fn mouse_proc(code: i32, wparam: WPARAM, lparam: LPARAM) 
             }
         }
         verdict
+    }
+}
+
+/// The suggestion-list action for a key, while the list owns the keys. Keys
+/// with Ctrl, Alt or Shift held stay with the app.
+fn list_key(vk: VIRTUAL_KEY) -> Option<Nav> {
+    if clock() >= LIST_KEYS_UNTIL_MS.load(Ordering::Relaxed) {
+        return None;
+    }
+    if key_down(VK_CONTROL) || key_down(VK_MENU) || key_down(VK_SHIFT) {
+        return None;
+    }
+    match vk {
+        VK_UP => Some(Nav::Up),
+        VK_DOWN => Some(Nav::Down),
+        VK_RETURN | VK_TAB => Some(Nav::Accept),
+        VK_ESCAPE => Some(Nav::Close),
+        _ => None,
     }
 }
 
@@ -555,6 +601,40 @@ pub fn focus_window(hwnd: isize) {
         if attach {
             AttachThreadInput(me, fg_thread, 0);
         }
+    }
+}
+
+/// Marks a window as one that never takes focus and stays above others, so
+/// the app being typed into keeps its text cursor.
+pub fn make_non_activating(hwnd: isize) {
+    unsafe {
+        let target = hwnd as HWND;
+        let style = GetWindowLongPtrW(target, GWL_EXSTYLE);
+        let wanted = (WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST) as isize;
+        SetWindowLongPtrW(target, GWL_EXSTYLE, style | wanted);
+    }
+}
+
+/// Moves, resizes and shows a window in screen pixels without activating it.
+pub fn place_without_activating(hwnd: isize, x: i32, y: i32, width: i32, height: i32) {
+    unsafe {
+        SetWindowPos(
+            hwnd as HWND,
+            HWND_TOPMOST,
+            x,
+            y,
+            width,
+            height,
+            SWP_NOACTIVATE | SWP_SHOWWINDOW,
+        );
+    }
+}
+
+/// Hides a window shown with `place_without_activating`. Asking the window
+/// toolkit to hide it does nothing, because it never learned the window was shown.
+pub fn hide_window(hwnd: isize) {
+    unsafe {
+        ShowWindow(hwnd as HWND, SW_HIDE);
     }
 }
 
