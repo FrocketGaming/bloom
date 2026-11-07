@@ -60,9 +60,16 @@ function partsHTML(parts, values) {
   }).join('');
 }
 
+let lastHeight = 0;
 function fit() {
   requestAnimationFrame(() => {
-    const h = Math.ceil($('pal').getBoundingClientRect().height);
+    // Measure the content, not the box: once the palette reaches the screen
+    // height it scrolls, and its box stops tracking what it holds.
+    const h = Math.ceil($('pal').scrollHeight);
+    // Resizing the window can re-enter here; only ask the backend when the
+    // height actually changed.
+    if (h === lastHeight) return;
+    lastHeight = h;
     invoke('resize_palette', { height: h });
   });
 }
@@ -79,25 +86,35 @@ function renderList() {
     list.innerHTML = `<div class="empty">No snippets match “${esc(q.value)}”.</div>`;
   } else {
     list.innerHTML = items.map((s, i) => `
-      <div class="row${i === sel ? ' sel' : ''}" data-i="${i}" role="option" aria-selected="${i === sel}">
+      <div class="row" data-i="${i}" role="option" aria-selected="false">
         ${s.trigger ? `<span class="trig">${highlight(s.trigger, q.value)}</span>` : '<span class="trig none">search</span>'}
         <span class="name">${highlight(s.name, q.value)}</span>
         ${s.fields.length ? '<span class="form-tag">form</span>' : ''}
         <span class="grp">${esc(s.group)}</span>
       </div>`).join('');
-    const selEl = list.querySelector('.row.sel');
-    if (selEl) selEl.scrollIntoView({ block: 'nearest' });
   }
+  selectRow(sel, true);
+  fit();
+}
+
+/** Moves the highlight without rebuilding the list: hovering used to redraw
+ *  every row each time the pointer crossed one. */
+function selectRow(i, scroll) {
+  sel = i;
+  $('list').querySelectorAll('.row').forEach((row) => {
+    const on = +row.dataset.i === i;
+    row.classList.toggle('sel', on);
+    row.setAttribute('aria-selected', String(on));
+    if (on && scroll) row.scrollIntoView({ block: 'nearest' });
+  });
   const s = items[sel];
   $('prev').hidden = !s;
   if (s) $('prev').innerHTML = `<div class="prev-label">Inserts</div><pre class="prev-body">${partsHTML(s.preview)}</pre>`;
-  fit();
 }
 
 function move(d) {
   if (!items.length) return;
-  sel = (sel + d + items.length) % items.length;
-  renderList();
+  selectRow((sel + d + items.length) % items.length, true);
 }
 
 async function choose(s) {
@@ -113,7 +130,7 @@ async function choose(s) {
 
 $('list').addEventListener('mousemove', (e) => {
   const row = e.target.closest('.row');
-  if (row && +row.dataset.i !== sel) { sel = +row.dataset.i; renderList(); }
+  if (row && +row.dataset.i !== sel) selectRow(+row.dataset.i, false);
 });
 $('list').addEventListener('mousedown', (e) => {
   const row = e.target.closest('.row');

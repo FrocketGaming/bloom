@@ -9,6 +9,7 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::sync::mpsc;
 use std::thread;
+use std::time::Duration;
 use tauri::AppHandle;
 
 pub fn start(app: AppHandle, state: Arc<AppState>) {
@@ -50,10 +51,19 @@ fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit) {
     platform::backspace(hit.delete);
 
     if !template::fields(&segs).is_empty() {
+        // The trigger is erased before the palette opens, so remember it:
+        // pressing Esc has to leave the user with the text they typed rather
+        // than nothing at all.
+        let restore = format!(
+            "{}{}",
+            snippet.trigger.as_deref().unwrap_or_default(),
+            hit.trailing
+        );
         *state.prev_window.lock().unwrap() = Some(platform::foreground_window());
         *state.pending_form.lock().unwrap() = Some(PendingForm {
             id: snippet.id.clone(),
             trailing: hit.trailing,
+            restore,
         });
         palette::open(app, Some(snippet.id));
         return;
@@ -85,4 +95,34 @@ pub fn deliver(state: &AppState, text: &str, trailing: &str, cursor_back: usize)
         platform::type_text(&full);
     }
     platform::cursor_left(cursor_back + trailing.chars().count());
+}
+
+/// Closes the palette and gives focus back to the window it covered (Esc, or
+/// the hotkey pressed again). A cancelled fill-in form gets its trigger
+/// re-typed, so the text the user typed isn't silently destroyed.
+pub fn close_palette(state: &Arc<AppState>) {
+    let form = state.pending_form.lock().unwrap().take();
+    let prev = state.prev_window.lock().unwrap().take();
+    let Some(prev) = prev else { return };
+    let restore = form.map(|f| f.restore).unwrap_or_default();
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(40));
+        platform::focus_window(prev);
+        // If Windows wouldn't hand focus back, typing the trigger now would
+        // drop it into whatever *is* focused. Losing the text beats inserting
+        // it into the wrong window.
+        if restore.is_empty() || platform::foreground_window() != prev {
+            return;
+        }
+        thread::sleep(Duration::from_millis(90));
+        platform::wait_for_modifiers_released();
+        platform::type_text(&restore);
+    });
+}
+
+/// The palette lost focus to another window: drop the pending form without
+/// pulling focus back, since the user has already moved on.
+pub fn dismiss_palette(state: &AppState) {
+    state.pending_form.lock().unwrap().take();
+    state.prev_window.lock().unwrap().take();
 }

@@ -1,5 +1,6 @@
 //! Showing and hiding the search palette window.
 
+use crate::engine;
 use crate::platform;
 use crate::state::AppState;
 use serde::Serialize;
@@ -61,12 +62,9 @@ pub fn hide(app: &AppHandle) {
 pub fn toggle(app: &AppHandle) {
     match window(app) {
         Some(w) if w.is_visible().unwrap_or(false) => {
-            app.state::<Arc<AppState>>()
-                .pending_form
-                .lock()
-                .unwrap()
-                .take();
+            let state = app.state::<Arc<AppState>>().inner().clone();
             hide(app);
+            engine::close_palette(&state);
         }
         _ => open(app, None),
     }
@@ -74,7 +72,16 @@ pub fn toggle(app: &AppHandle) {
 
 pub fn resize(app: &AppHandle, height: f64) {
     if let Some(w) = window(app) {
-        let _ = w.set_size(LogicalSize::new(WIDTH, height.clamp(60.0, 640.0)));
+        // Never taller than the screen: a snippet with a lot of fill-in fields
+        // used to be clipped, with the Insert hint out of reach.
+        let tallest = w
+            .current_monitor()
+            .ok()
+            .flatten()
+            .map(|m| (m.size().height as f64 / m.scale_factor()).floor() - 24.0)
+            .unwrap_or(860.0)
+            .max(200.0);
+        let _ = w.set_size(LogicalSize::new(WIDTH, height.clamp(60.0, tallest)));
     }
 }
 
@@ -86,13 +93,10 @@ pub fn setup(app: &AppHandle) {
     let handle = app.clone();
     w.on_window_event(move |ev| {
         if let tauri::WindowEvent::Focused(false) = ev {
-            // Clicking away closes the palette and cancels any form.
-            handle
-                .state::<Arc<AppState>>()
-                .pending_form
-                .lock()
-                .unwrap()
-                .take();
+            // Clicking away closes the palette and cancels any form. Focus
+            // belongs to whatever was clicked, so don't take it back.
+            let state = handle.state::<Arc<AppState>>().inner().clone();
+            engine::dismiss_palette(&state);
             hide(&handle);
         }
     });

@@ -34,8 +34,10 @@ html, body { margin: 0; background: transparent; overflow: hidden; }
 body { font: 14px/1.45 var(--ui); color: var(--ink); user-select: none; -webkit-user-select: none; }
 [hidden] { display: none !important; }
 
-/* The window is resized to fit this element, so it must not stretch to the window. */
-.pal { display: flex; flex-direction: column; }
+/* The window is resized to fit this element, so it must not stretch to the
+   window. Cap it at the screen and scroll: a snippet with a lot of fill-in
+   fields used to be clipped, with the Insert hint out of reach. */
+.pal { display: flex; flex-direction: column; max-height: 100vh; overflow-y: auto; }
 html { background: var(--tint); }
 
 /* Search row */
@@ -93,6 +95,8 @@ mark { background: none; color: var(--accent); font-weight: 600; }
 .foot { display: flex; gap: 16px; align-items: center; padding: 9px 18px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
 .foot span { display: inline-flex; gap: 6px; align-items: center; }
 .foot .r { margin-left: auto; }
+/* A form that scrolls keeps its Insert hint in view. */
+#form-view .foot { position: sticky; bottom: 0; background: var(--tint); backdrop-filter: blur(18px); }
 
 @media (prefers-reduced-motion: no-preference) {
   .pal { animation: in .12s ease-out; }
