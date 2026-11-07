@@ -57,6 +57,7 @@ async function loadAll() {
   renderErrors();
   renderTree();
   renderGeneral();
+  refreshVariableChoices();
   $('paused').checked = settings.paused;
   $('paused-label').textContent = settings.paused ? 'Paused' : 'Expanding';
 }
@@ -287,13 +288,10 @@ $('ed-name').addEventListener('input', () => {
 });
 
 // Insert placeholder buttons
-$('chips').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-ins]');
-  if (!b) return;
+function insertPlaceholder(ins) {
   const ta = $('ed-body');
   const start = ta.selectionStart;
   const end = ta.selectionEnd;
-  const ins = b.dataset.ins;
   ta.value = ta.value.slice(0, start) + ins + ta.value.slice(end);
   ta.focus();
   // Select the label of a new field so it can be typed over.
@@ -301,6 +299,34 @@ $('chips').addEventListener('click', (e) => {
   else ta.setSelectionRange(start + ins.length, start + ins.length);
   updateDirty();
   updatePreview();
+}
+
+$('chips').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-ins]');
+  if (b) insertPlaceholder(b.dataset.ins);
+});
+
+const MANAGE_VARIABLES = '__manage__';
+
+/** Fills the Variable drop-down with the names currently defined. */
+async function refreshVariableChoices() {
+  try {
+    const { variables } = await invoke('list_variables');
+    $('chip-var').replaceChildren(
+      el('option', { value: '', textContent: 'Variable…' }),
+      ...variables.map((v) => el('option', { value: v.name, textContent: v.name })),
+      el('option', { value: MANAGE_VARIABLES, textContent: variables.length ? 'Manage variables…' : 'Add a variable…' }),
+    );
+  } catch {
+    // The drop-down keeps what it had; the buttons beside it still work.
+  }
+}
+
+$('chip-var').addEventListener('change', (e) => {
+  const choice = e.target.value;
+  e.target.value = '';
+  if (choice === MANAGE_VARIABLES) openVariables();
+  else if (choice) insertPlaceholder(`{{var:${choice}}}`);
 });
 
 let previewTimer = null;
@@ -638,6 +664,7 @@ listen('variables-changed', async () => {
   // Keeps the warnings banner and the preview honest after variables.toml changes.
   settings = await invoke('get_settings');
   renderErrors();
+  refreshVariableChoices();
   if (view === 'variables' && !varsDirty) await loadVariables();
   if (view === 'editor') updatePreview();
 });

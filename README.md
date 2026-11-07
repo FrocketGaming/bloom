@@ -67,12 +67,33 @@ Sam"""
 | `{{cursor}}` | Nothing; the cursor is placed here afterwards |
 | `{{field:Label}}` | A value you type in before inserting |
 | `{{field:Label\|A\|B}}` | One of the listed options |
+| `{{var:name}}` | One of [your own variables](#your-own-variables): its text, or a choice from its list |
 
 Triggers only expand at the start of a word (after a space, punctuation or a new line), so `;fu` fires but `x;fu` doesn't. Set `word = false` on a snippet to let it expand mid-word too. Snippets without a `trigger` appear only in search.
 
 Starting triggers with `;` is recommended: a semicolon is almost never followed directly by a letter in prose or code, so triggers don't fire by accident, and it doesn't need Shift. Any text works as a trigger, though.
 
 Settings such as the hotkey are in `%APPDATA%\Bloom\bloom.toml`, or under **Settings** in the Bloom window.
+
+## Your own variables
+
+Define something once and use it in any snippet as `{{var:name}}`, instead of retyping it in every snippet. Open **Variables** in the Bloom window to add them, or edit `%APPDATA%\Bloom\variables.toml` yourself; Bloom reloads it as soon as you save.
+
+```toml
+[variables]
+email = "sam@example.com"
+address = """
+221 Harbor Street, Suite 4
+Portland, OR 97209"""
+signoff = ["Best", "Cheers", "Kind regards"]
+```
+
+- **Text** (`email`) is inserted exactly as written. Placeholders inside it, such as `{{date}}`, are not expanded; put those in the snippet next to it.
+- **A list** (`signoff`) asks you to pick one when the snippet is used, in the same form as `{{field:...}}`, labelled with the variable's name. Using it twice in one snippet asks once.
+- **Names** use letters, digits, `-` and `_`, and ignore case, so `{{var:Email}}` and `{{var:email}}` are the same variable.
+- **A name nothing defines** (a typo, or a variable you removed) is inserted as typed, so the mistake is visible. It is underlined in the snippet's preview and listed in the warnings at the top of the Bloom window.
+- **The Variables page** shows how many snippets use each variable and offers an **Add** button for names that snippets use but nothing defines. The **Variable** drop-down above a snippet's text inserts a placeholder for you.
+- **Comments in the file are kept** when the page saves it. If the file has a syntax error, Bloom leaves it alone and says so, and an entry it cannot read is never deleted by a save.
 
 ## Suggestions while you type
 
