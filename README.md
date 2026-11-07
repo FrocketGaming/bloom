@@ -8,7 +8,15 @@ A text expander for Windows, written in Rust. Type a trigger like `;sig` and Blo
 - **Fill-in forms.** `{{field:Name}}` asks for a value before inserting; `{{field:Tone|Warm|Formal}}` offers a choice.
 - **Plain files.** Snippets live in TOML files that reload as soon as you save them, plus a settings window for editing them.
 
-## Running it
+## Install
+
+Download `Bloom_x.y.z_x64-setup.exe` from the [latest release](https://github.com/FrocketGaming/bloom/releases/latest) and run it. It installs for your user account, so no admin rights are needed, and adds Bloom to the Start Menu. Requires Windows 10 or 11.
+
+The installer isn't code-signed yet, so Windows may show "Windows protected your PC". Click **More info**, then **Run anyway**. Each release lists the installer's SHA-256 hash if you want to verify the download.
+
+Bloom runs in the system tray. Click the flower icon to open the snippet editor, or right-click it for more options. Uninstalling from Windows Settings removes the app but keeps your snippets in `%APPDATA%\Bloom`.
+
+## Building from source
 
 You need [Rust](https://rustup.rs) with the MSVC toolchain, and the Visual Studio C++ Build Tools.
 
@@ -17,7 +25,19 @@ cargo build --release
 ./target/release/bloom.exe
 ```
 
-Bloom runs in the system tray. Click the flower icon to open the snippet editor, or right-click it for more options. Use `cargo run` during development; that build also opens a console window with log output.
+Use `cargo run` during development; that build also opens a console window with log output. To build the installer, you also need [Node.js](https://nodejs.org):
+
+```sh
+npx @tauri-apps/cli@2 build
+```
+
+The installer is written to `target/release/bundle/nsis/`.
+
+### Releasing
+
+1. Update `version` in both `Cargo.toml` and `tauri.conf.json`, and merge that change.
+2. Tag the merge commit and push the tag: `git tag v0.2.0 && git push origin v0.2.0`.
+3. The Release workflow builds the installer and creates a draft release. Review it on GitHub, then publish.
 
 ## Writing snippets
 
