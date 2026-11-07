@@ -316,7 +316,6 @@ dependencies = [
  "dirs",
  "notify-debouncer-mini",
  "serde",
- "serde_json",
  "tauri",
  "tauri-build",
  "tauri-plugin-global-shortcut",

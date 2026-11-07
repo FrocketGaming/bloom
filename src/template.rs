@@ -105,13 +105,25 @@ fn fmt_time(fmt: &str) -> String {
     }
 }
 
+/// Reads the clipboard once, for callers that show several previews at a time.
+/// Opening the palette shouldn't open the clipboard once per snippet.
+pub fn read_clipboard() -> Option<String> {
+    arboard::Clipboard::new()
+        .ok()
+        .and_then(|mut c| c.get().text().ok())
+}
+
+/// True when a body needs the clipboard, so callers can avoid reading it.
+pub fn uses_clipboard(segs: &[Seg]) -> bool {
+    segs.iter()
+        .any(|s| matches!(s, Seg::Var { name, .. } if name == "clipboard"))
+}
+
 pub fn var_value(name: &str, arg: Option<&str>) -> String {
     match name {
         "date" => fmt_time(arg.unwrap_or("%b %-d, %Y")),
         "time" => fmt_time(arg.unwrap_or("%-I:%M %p")),
-        "clipboard" => arboard::Clipboard::new()
-            .and_then(|mut c| c.get_text())
-            .unwrap_or_default(),
+        "clipboard" => read_clipboard().unwrap_or_default(),
         _ => String::new(),
     }
 }
@@ -140,7 +152,7 @@ pub fn render(segs: &[Seg], values: &HashMap<String, String>) -> Rendered {
     }
 }
 
-pub fn preview(segs: &[Seg]) -> Vec<Part> {
+pub fn preview(segs: &[Seg], clipboard: Option<&str>) -> Vec<Part> {
     segs.iter()
         .map(|s| match s {
             Seg::Text(t) => Part {
@@ -148,7 +160,11 @@ pub fn preview(segs: &[Seg]) -> Vec<Part> {
                 text: t.clone(),
             },
             Seg::Var { name, arg } => {
-                let mut v = var_value(name, arg.as_deref());
+                let mut v = if name == "clipboard" {
+                    clipboard.unwrap_or_default().to_string()
+                } else {
+                    var_value(name, arg.as_deref())
+                };
                 if v.chars().count() > 120 {
                     v = v.chars().take(120).collect::<String>() + "…";
                 }
@@ -200,5 +216,14 @@ mod tests {
     #[test]
     fn unclosed_braces_are_text() {
         assert_eq!(parse("a {{date"), vec![Seg::Text("a {{date".into())]);
+    }
+
+    #[test]
+    fn preview_takes_the_clipboard_it_is_given() {
+        let segs = parse("[{{clipboard}}]");
+        assert!(uses_clipboard(&segs));
+        assert_eq!(preview(&segs, Some("hi"))[1].text, "hi");
+        assert_eq!(preview(&segs, None)[1].text, "(clipboard is empty)");
+        assert!(!uses_clipboard(&parse("{{date}}")));
     }
 }

@@ -9,6 +9,9 @@ use tauri::{AppHandle, Emitter, Manager, Wry};
 
 pub struct PauseItem(pub CheckMenuItem<Wry>);
 
+/// The "Search snippets" item, whose text carries the current hotkey.
+pub struct SearchItem(pub MenuItem<Wry>);
+
 pub fn build(app: &AppHandle) -> tauri::Result<()> {
     let hotkey = app
         .state::<Arc<AppState>>()
@@ -39,6 +42,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         ],
     )?;
     app.manage(PauseItem(pause));
+    app.manage(SearchItem(search));
 
     TrayIconBuilder::with_id("bloom")
         .icon(app.default_window_icon().cloned().expect("app icon"))
@@ -76,6 +80,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
         })
         .build(app)?;
     Ok(())
+}
+
+/// Keeps the tray menu's hotkey hint in step with the settings window.
+pub fn set_hotkey(app: &AppHandle, hotkey: &str) {
+    if let Some(item) = app.try_state::<SearchItem>() {
+        let _ = item.0.set_text(format!("Search snippets\t{hotkey}"));
+    }
 }
 
 /// Keeps the tray checkbox, tooltip and settings window in step with the paused state.
