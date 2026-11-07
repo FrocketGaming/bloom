@@ -50,7 +50,21 @@ button { font: inherit; color: inherit; }
 }
 .side-tools input:focus { border-color: var(--accent); }
 .tree { flex: 1; overflow-y: auto; padding: 0 8px 12px; }
-.group { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; padding: 14px 10px 4px; }
+.group {
+  display: flex; align-items: center; gap: 6px; width: 100%; text-align: left; background: none; border: 0;
+  font: 600 11px/1 var(--ui); text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+  padding: 14px 10px 4px; cursor: pointer; border-radius: 7px;
+}
+.group:hover { color: var(--ink); }
+.group:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.group .gname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.group .gcount { font-weight: 500; letter-spacing: 0; }
+.chev {
+  width: 6px; height: 6px; margin: 0 2px 2px; flex: none; transform: rotate(-45deg); transition: transform .12s;
+  border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor;
+}
+.group[aria-expanded="true"] .chev { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
 .item {
   display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0;
   padding: 7px 10px; border-radius: 7px; cursor: pointer; min-width: 0;

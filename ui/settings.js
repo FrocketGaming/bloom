@@ -69,24 +69,73 @@ function renderErrors() {
 
 // ---------- Sidebar ----------
 
+// Groups the user folded away. Kept in the window's own storage, so it is a
+// per-device convenience; if storage is unavailable, folding still works for
+// the session.
+const COLLAPSED_KEY = 'bloom.collapsedGroups';
+
+function loadCollapsed() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(COLLAPSED_KEY));
+    return new Set(Array.isArray(saved) ? saved : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsed() {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsed]));
+  } catch {
+    // Not saved, but the groups still fold and unfold.
+  }
+}
+
+const collapsed = loadCollapsed();
+
+function filterText() {
+  return $('filter').value.toLowerCase().trim();
+}
+
+function toggleGroup(group) {
+  // While filtering, every match is shown so that none can be hidden by a fold.
+  if (filterText()) return;
+  if (collapsed.has(group)) collapsed.delete(group); else collapsed.add(group);
+  saveCollapsed();
+  renderTree();
+  // The list is rebuilt, so put keyboard focus back on the header just used.
+  const header = [...$('tree').querySelectorAll('.group')].find((h) => h.dataset.group === group);
+  if (header) header.focus();
+}
+
 function renderTree() {
-  const f = $('filter').value.toLowerCase().trim();
+  const f = filterText();
   const shown = snippets.filter((s) => !f || `${s.name} ${s.trigger || ''} ${s.body} ${s.group}`.toLowerCase().includes(f));
   if (!shown.length) {
     $('tree').innerHTML = `<div class="empty">${snippets.length ? 'No snippets match.' : 'No snippets yet. Press New to add one.'}</div>`;
     return;
   }
-  let html = '';
-  let group = null;
+  const groups = new Map();
   for (const s of shown) {
-    if (s.group !== group) { group = s.group; html += `<div class="group">${esc(group)}</div>`; }
-    const sel = current && current.id === s.id && view === 'editor' ? ' sel' : '';
-    html += `<button type="button" class="item${sel}" data-id="${esc(s.id)}"><span class="nm">${esc(s.name)}</span>${s.trigger ? `<span class="trig">${esc(s.trigger)}</span>` : ''}</button>`;
+    if (!groups.has(s.group)) groups.set(s.group, []);
+    groups.get(s.group).push(s);
+  }
+  let html = '';
+  for (const [group, items] of groups) {
+    const open = Boolean(f) || !collapsed.has(group);
+    html += `<button type="button" class="group" data-group="${esc(group)}" aria-expanded="${open}"><span class="chev" aria-hidden="true"></span><span class="gname">${esc(group)}</span><span class="gcount">${items.length}</span></button>`;
+    if (!open) continue;
+    for (const s of items) {
+      const sel = current && current.id === s.id && view === 'editor' ? ' sel' : '';
+      html += `<button type="button" class="item${sel}" data-id="${esc(s.id)}"><span class="nm">${esc(s.name)}</span>${s.trigger ? `<span class="trig">${esc(s.trigger)}</span>` : ''}</button>`;
+    }
   }
   $('tree').innerHTML = html;
 }
 
 $('tree').addEventListener('click', (e) => {
+  const header = e.target.closest('.group');
+  if (header) { toggleGroup(header.dataset.group); return; }
   const item = e.target.closest('.item');
   if (!item) return;
   const s = snippets.find((x) => x.id === item.dataset.id);
@@ -195,7 +244,11 @@ async function save() {
     restoreFileSelect();
     await loadAll();
     const s = snippets.find((x) => x.id === id);
-    if (s) openSnippet(s);
+    if (s) {
+      // A snippet saved into a folded group would vanish from the list.
+      if (collapsed.delete(s.group)) saveCollapsed();
+      openSnippet(s);
+    }
     flashSaved();
   } catch (e) {
     setStatus('ed-status', String(e), 'err');
