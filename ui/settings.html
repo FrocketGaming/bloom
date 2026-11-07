@@ -146,6 +146,19 @@
     </section>
   </main>
 </div>
+
+<!-- Asks before something is lost. The browser's own confirm box would title
+     itself with the app's internal address, so Bloom draws its own. -->
+<dialog id="confirm" class="dlg" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+  <form method="dialog">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-message"></p>
+    <div class="dlg-actions">
+      <button id="confirm-cancel" class="btn" type="submit" value="cancel" autofocus></button>
+      <button id="confirm-ok" class="btn" type="submit" value="ok"></button>
+    </div>
+  </form>
+</dialog>
 <script src="settings.js"></script>
 </body>
 </html>
