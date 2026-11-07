@@ -65,6 +65,7 @@ fn main() {
             commands::set_paused,
             commands::save_snippet,
             commands::delete_snippet,
+            commands::delete_snippet_file,
             commands::open_snippets_folder,
             commands::list_variables,
             commands::save_variables,

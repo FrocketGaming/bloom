@@ -197,3 +197,16 @@ select option { background-color: var(--field); color: var(--ink); }
   select option:focus-visible { outline: none; }
   select::picker-icon { color: var(--muted); font-size: .8em; }
 }
+
+/* Deleting a snippet file: the trash button on a group header, shown on hover
+   and on keyboard focus so the list stays clean. */
+.group-row { display: flex; align-items: center; }
+.group-row .group { flex: 1; min-width: 0; width: auto; }
+.group-del {
+  flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-top: 10px;
+  border: 0; border-radius: 6px; background: none; color: var(--muted); cursor: pointer; opacity: 0; transition: opacity .12s;
+}
+.group-row:hover .group-del, .group-del:focus-visible { opacity: 1; }
+.group-del:hover { color: var(--danger); background: var(--hover); }
+.group-del svg { width: 15px; height: 15px; }
+@media (prefers-reduced-motion: reduce) { .group-del { transition: none; } }

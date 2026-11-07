@@ -112,29 +112,65 @@ function toggleGroup(group) {
 function renderTree() {
   const f = filterText();
   const shown = snippets.filter((s) => !f || `${s.name} ${s.trigger || ''} ${s.body} ${s.group}`.toLowerCase().includes(f));
-  if (!shown.length) {
+  // One entry per file, so a file with no snippets still has a header and can
+  // be deleted. While filtering, only files with matches are listed.
+  const files = (settings && settings.snippet_files) || [];
+  const rows = files
+    .map((file) => ({ file, items: shown.filter((s) => s.file === file.file) }))
+    .filter((row) => !f || row.items.length);
+  if (!rows.length) {
     $('tree').innerHTML = `<div class="empty">${snippets.length ? 'No snippets match.' : 'No snippets yet. Press New to add one.'}</div>`;
     return;
   }
-  const groups = new Map();
-  for (const s of shown) {
-    if (!groups.has(s.group)) groups.set(s.group, []);
-    groups.get(s.group).push(s);
-  }
   let html = '';
-  for (const [group, items] of groups) {
+  for (const { file, items } of rows) {
+    const group = file.group;
     const open = Boolean(f) || !collapsed.has(group);
-    html += `<button type="button" class="group" data-group="${esc(group)}" aria-expanded="${open}"><span class="chev" aria-hidden="true"></span><span class="gname">${esc(group)}</span><span class="gcount">${items.length}</span></button>`;
+    const count = file.snippets === 0 ? 'empty' : items.length;
+    html += `<div class="group-row"><button type="button" class="group" data-group="${esc(group)}" aria-expanded="${open}"><span class="chev" aria-hidden="true"></span><span class="gname">${esc(group)}</span><span class="gcount">${count}</span></button><button type="button" class="group-del" data-file="${esc(file.file)}" title="Delete ${esc(file.file)}" aria-label="Delete ${esc(file.file)}"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4.5 6h11M8 6V4.5h4V6M6 6l.7 9.2c0 .5.4.8.9.8h4.8c.5 0 .9-.3.9-.8L14 6M8.4 9v4.2M11.6 9v4.2" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>`;
     if (!open) continue;
     for (const s of items) {
       const sel = current && current.id === s.id && view === 'editor' ? ' sel' : '';
       html += `<button type="button" class="item${sel}" data-id="${esc(s.id)}"><span class="nm">${esc(s.name)}</span>${s.trigger ? `<span class="trig">${esc(s.trigger)}</span>` : ''}</button>`;
     }
   }
+  if (!snippets.length) html += '<div class="empty">No snippets yet. Press New to add one.</div>';
   $('tree').innerHTML = html;
 }
 
+/**
+ * Moves a whole snippet file to the Recycle Bin, after asking. The dialog says
+ * how many snippets it holds, so it is clear what is being removed.
+ */
+async function deleteFile(file) {
+  const info = ((settings && settings.snippet_files) || []).find((f) => f.file === file);
+  const count = info ? info.snippets : 0;
+  let message = count === 0
+    ? 'It has no snippets.'
+    : `It holds ${count} snippet${count === 1 ? '' : 's'}.`;
+  message += ' The file is moved to the Recycle Bin, where you can restore it from.';
+  if (dirty && current && current.file === file) {
+    message += ' Your unsaved changes to the open snippet will be lost.';
+  }
+  const confirmed = await askConfirm({ title: `Delete ${file}?`, message, confirm: 'Delete file', danger: true });
+  if (!confirmed) return;
+  try {
+    await invoke('delete_snippet_file', { file });
+  } catch (e) {
+    await askConfirm({ title: 'The file was not deleted', message: String(e), confirm: 'OK', cancel: null });
+    return;
+  }
+  const wasOpen = Boolean(current && current.file === file);
+  if (wasOpen) { dirty = false; current = null; }
+  await loadAll();
+  if (wasOpen && view === 'editor') {
+    if (snippets.length) openSnippet(snippets[0]); else await newSnippet();
+  }
+}
+
 $('tree').addEventListener('click', async (e) => {
+  const trash = e.target.closest('.group-del');
+  if (trash) { deleteFile(trash.dataset.file); return; }
   const header = e.target.closest('.group');
   if (header) { toggleGroup(header.dataset.group); return; }
   const item = e.target.closest('.item');
@@ -155,7 +191,9 @@ function askConfirm({ title, message, confirm, cancel = 'Cancel', danger = false
   const ok = $('confirm-ok');
   $('confirm-title').textContent = title;
   $('confirm-message').textContent = message;
-  $('confirm-cancel').textContent = cancel;
+  // A message that only needs acknowledging has no Cancel button.
+  $('confirm-cancel').hidden = cancel === null;
+  if (cancel !== null) $('confirm-cancel').textContent = cancel;
   ok.textContent = confirm;
   ok.classList.toggle('danger', danger);
   ok.classList.toggle('primary', !danger);
