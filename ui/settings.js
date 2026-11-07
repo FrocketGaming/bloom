@@ -284,6 +284,7 @@ function renderGeneral() {
   $('inject-hint').textContent = INJECT_HINTS[c.inject];
   $('threshold-row').hidden = c.inject !== 'auto';
   if (document.activeElement !== $('threshold')) $('threshold').value = c.clipboard_threshold;
+  $('suggestions').querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === (c.suggestions ? 'on' : 'off'))));
   $('folder').textContent = settings.snippets_dir;
 }
 
@@ -306,6 +307,10 @@ async function saveConfig(patch) {
 $('inject').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]');
   if (b) saveConfig({ inject: b.dataset.v });
+});
+$('suggestions').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (b) saveConfig({ suggestions: b.dataset.v === 'on' });
 });
 $('threshold').addEventListener('change', () => {
   const n = parseInt($('threshold').value, 10);

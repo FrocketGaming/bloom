@@ -55,7 +55,12 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
                     expand(&app, &state, hit, None);
                     continue;
                 }
-                match matcher.suggest(&triggers) {
+                let suggestion = if state.config.read().unwrap().suggestions {
+                    matcher.suggest(&triggers)
+                } else {
+                    None
+                };
+                match suggestion {
                     None => {
                         dismissed = false;
                         close_menu(&app, &mut menu);

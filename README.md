@@ -4,6 +4,7 @@ A text expander for Windows, written in Rust. Type a trigger like `;sig` and Blo
 
 - **Instant triggers.** Snippets expand as soon as you finish typing the trigger. If one trigger is the start of another (`;sig` and `;sign`), Bloom waits for your next key to decide.
 - **Snippet search.** A frosted, centered search box with a live preview of what will be inserted.
+- **Suggestions as you type.** After the first few characters of a trigger, a short list of matching snippets opens at your text cursor.
 - **Variables.** `{{date}}`, `{{time}}`, `{{clipboard}}`, and `{{cursor}}` to choose where the cursor ends up.
 - **Fill-in forms.** `{{field:Name}}` asks for a value before inserting; `{{field:Tone|Warm|Formal}}` offers a choice.
 - **Plain files.** Snippets live in TOML files that reload as soon as you save them, plus a settings window for editing them.
@@ -72,6 +73,24 @@ Triggers only expand at the start of a word (after a space, punctuation or a new
 Starting triggers with `;` is recommended: a semicolon is almost never followed directly by a letter in prose or code, so triggers don't fire by accident, and it doesn't need Shift. Any text works as a trigger, though.
 
 Settings such as the hotkey are in `%APPDATA%\Bloom\bloom.toml`, or under **Settings** in the Bloom window.
+
+## Suggestions while you type
+
+Type a trigger's symbol and the next two characters (`;si`) and a small list opens just below your text cursor, showing the snippets that trigger could still become. The highlighted row also shows the start of its text.
+
+| Key | Does |
+| --- | --- |
+| Up / Down | Move the highlight, wrapping around |
+| Enter or Tab | Insert the highlighted snippet in place of what you typed |
+| Esc | Close the list. It stays closed until you type something else |
+| Keep typing | The list narrows. Finish a trigger and it expands as usual |
+
+- **Only for triggers that start with a symbol,** such as `;sig`, and only at the start of a word (or anywhere, for snippets set to `word = false`). Triggers made of plain letters never open the list, and snippets without a trigger stay in search.
+- **Snippets with fill-in fields** show an ellipsis after their name. Choosing one opens the usual form; cancelling it puts back what you typed.
+- **The list never takes focus.** While it is open it takes the arrow keys, Enter, Tab and Esc, and gives them back the moment it closes. Those keys go to your app unchanged when Ctrl, Alt or Shift is held.
+- **It needs the app to report where its text cursor is.** Most apps do. In one that doesn't, no list opens and triggers expand exactly as before.
+- **Never shown** in password fields, while Bloom is paused, or in Bloom's own windows.
+- **To turn it off,** use **Suggestions while typing** under **Settings**, or set `suggestions = false` in `bloom.toml`.
 
 ## Using two computers (Mouse Without Borders)
 

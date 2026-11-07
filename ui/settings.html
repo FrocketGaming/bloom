@@ -91,6 +91,14 @@
           <div class="inline"><input id="threshold" type="number" min="1" max="10000"> characters</div>
         </label>
         <div class="fld">
+          <span>Suggestions while typing</span>
+          <div class="seg" id="suggestions" role="radiogroup">
+            <button type="button" data-v="on">On</button>
+            <button type="button" data-v="off">Off</button>
+          </div>
+          <p class="hint">After the first three characters of a trigger, such as <code>;si</code>, a short list of matching snippets opens at your text cursor. Up and Down move, Enter or Tab inserts, Esc closes. Apps that don’t report their cursor position just don’t show it.</p>
+        </div>
+        <div class="fld">
           <span>Snippets folder</span>
           <div class="inline"><code id="folder"></code><button id="open-folder" class="btn" type="button">Open folder</button></div>
           <p class="hint">Snippets are plain TOML files. Edit them in any editor and Bloom reloads them when you save.</p>
