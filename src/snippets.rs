@@ -20,8 +20,13 @@ struct RawSnippet {
     trigger: Option<String>,
     name: Option<String>,
     body: String,
-    #[serde(default)]
+    /// Only expand at the start of a word. On unless a snippet sets `word = false`.
+    #[serde(default = "default_word")]
     word: bool,
+}
+
+fn default_word() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -211,10 +216,11 @@ pub fn save(dir: &Path, edit: SnippetEdit) -> Result<String> {
     set_opt(tbl, "trigger", edit.trigger);
     set_opt(tbl, "name", edit.name);
     tbl["body"] = Item::Value(body_value(&edit.body.replace("\r\n", "\n"))?);
+    // Start-of-word is the default, so only the exception is written out.
     if edit.word {
-        tbl["word"] = toml_edit::value(true);
-    } else {
         tbl.remove("word");
+    } else {
+        tbl["word"] = toml_edit::value(false);
     }
     fs::write(&path, doc.to_string())?;
     Ok(format!("{file}#{index}"))
@@ -321,7 +327,7 @@ mod tests {
         fs::create_dir_all(&dir).unwrap();
         fs::write(
             dir.join("a.toml"),
-            "# keep me\n[[snippet]]\ntrigger = \":x\"\nbody = \"x\"\n",
+            "# keep me\n[[snippet]]\ntrigger = \";x\"\nbody = \"x\"\n",
         )
         .unwrap();
         let id = save(
@@ -329,22 +335,24 @@ mod tests {
             SnippetEdit {
                 file: "a".into(),
                 index: None,
-                trigger: Some(":y".into()),
+                trigger: Some(";y".into()),
                 name: None,
                 body: "line1\nline2".into(),
-                word: true,
+                word: false,
             },
         )
         .unwrap();
         assert_eq!(id, "a.toml#1");
         let text = fs::read_to_string(dir.join("a.toml")).unwrap();
         assert!(text.contains("# keep me"));
+        assert!(text.contains("word = false"));
         let store = Store::load(&dir);
         assert_eq!(store.snippets.len(), 2);
+        assert!(store.snippets[0].word, "start-of-word is the default");
         assert_eq!(store.snippets[1].body, "line1\nline2");
-        assert!(store.snippets[1].word);
+        assert!(!store.snippets[1].word);
         delete(&dir, "a.toml", 0).unwrap();
-        assert_eq!(Store::load(&dir).snippets[0].trigger.as_deref(), Some(":y"));
+        assert_eq!(Store::load(&dir).snippets[0].trigger.as_deref(), Some(";y"));
         fs::remove_dir_all(&dir).ok();
     }
 }

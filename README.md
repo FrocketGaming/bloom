@@ -1,8 +1,8 @@
 # Bloom
 
-A text expander for Windows, written in Rust. Type a trigger like `:sig` and Bloom replaces it with your text, or press **Ctrl+Shift+Space** to search all your snippets.
+A text expander for Windows, written in Rust. Type a trigger like `;sig` and Bloom replaces it with your text, or press **Ctrl+Shift+Space** to search all your snippets.
 
-- **Instant triggers.** Snippets expand as soon as you finish typing the trigger. If one trigger is the start of another (`:sig` and `:sign`), Bloom waits for your next key to decide.
+- **Instant triggers.** Snippets expand as soon as you finish typing the trigger. If one trigger is the start of another (`;sig` and `;sign`), Bloom waits for your next key to decide.
 - **Snippet search.** A frosted, centered search box with a live preview of what will be inserted.
 - **Variables.** `{{date}}`, `{{time}}`, `{{clipboard}}`, and `{{cursor}}` to choose where the cursor ends up.
 - **Fill-in forms.** `{{field:Name}}` asks for a value before inserting; `{{field:Tone|Warm|Formal}}` offers a choice.
@@ -45,7 +45,7 @@ Snippets are stored in `%APPDATA%\Bloom\snippets\*.toml`. Each file becomes a gr
 
 ```toml
 [[snippet]]
-trigger = ":fu"
+trigger = ";fu"
 name = "Meeting follow-up"
 body = """
 Hi {{field:Name}},
@@ -67,7 +67,9 @@ Sam"""
 | `{{field:Label}}` | A value you type in before inserting |
 | `{{field:Label\|A\|B}}` | One of the listed options |
 
-Set `word = true` on a snippet to expand only when the trigger starts a new word. Snippets without a `trigger` appear only in search.
+Triggers only expand at the start of a word (after a space, punctuation or a new line), so `;fu` fires but `x;fu` doesn't. Set `word = false` on a snippet to let it expand mid-word too. Snippets without a `trigger` appear only in search.
+
+Starting triggers with `;` is recommended: a semicolon is almost never followed directly by a letter in prose or code, so triggers don't fire by accident, and it doesn't need Shift. Any text works as a trigger, though.
 
 Settings such as the hotkey are in `%APPDATA%\Bloom\bloom.toml`, or under **Settings** in the Bloom window.
 

@@ -65,32 +65,35 @@ const DEFAULT_SNIPPETS: &str = r#"# Your snippets. Bloom reloads this folder as 
 #   {{field:Name}}          ask for a value before inserting
 #   {{field:Tone|Warm|Formal}}  ask you to pick one of these options
 #
-# Set word = true to expand only when the trigger starts a new word.
+# Triggers start with ; because a semicolon is almost never followed directly
+# by a letter, so they don't fire by accident. They also only expand at the
+# start of a word: after a space, punctuation or a new line. Set word = false
+# on a snippet to let it expand in the middle of a word too.
 
 [[snippet]]
-trigger = ":sig"
+trigger = ";sig"
 name = "Email signature"
 body = """
 Best,
 Your Name"""
 
 [[snippet]]
-trigger = ":date"
+trigger = ";date"
 name = "Today's date"
 body = "{{date}}"
 
 [[snippet]]
-trigger = ":time"
+trigger = ";time"
 name = "Current time"
 body = "{{time}}"
 
 [[snippet]]
-trigger = ":shrug"
+trigger = ";shrug"
 name = "Shrug"
 body = '¯\_(ツ)_/¯'
 
 [[snippet]]
-trigger = ":quote"
+trigger = ";quote"
 name = "Quote clipboard"
 body = """
 > {{clipboard}}
@@ -98,7 +101,7 @@ body = """
 {{cursor}}"""
 
 [[snippet]]
-trigger = ":hi"
+trigger = ";hi"
 name = "Greeting"
 body = """
 Hi {{field:Name}},
@@ -109,7 +112,7 @@ Thanks,
 Your Name"""
 
 [[snippet]]
-trigger = ":fu"
+trigger = ";fu"
 name = "Meeting follow-up"
 body = """
 Hi {{field:Name}},
