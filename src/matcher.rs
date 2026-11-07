@@ -1,8 +1,8 @@
 //! Watches typed characters and decides when a trigger has been typed.
 //!
-//! When one trigger is the start of another (":sig" and ":sign"), Bloom waits
-//! for the next key: typing "n" expands ":sign", typing anything else expands
-//! ":sig" and keeps that extra character.
+//! When one trigger is the start of another (";sig" and ";sign"), Bloom waits
+//! for the next key: typing "n" expands ";sign", typing anything else expands
+//! ";sig" and keeps that extra character.
 
 use crate::snippets::Trigger;
 
@@ -150,13 +150,13 @@ mod tests {
 
     #[test]
     fn simple_trigger() {
-        let t = vec![trig(":date", false)];
+        let t = vec![trig(";date", false)];
         let mut m = Matcher::default();
-        let hits = typed(&mut m, "today is :date", &t);
+        let hits = typed(&mut m, "today is ;date", &t);
         assert_eq!(
             hits,
             vec![Hit {
-                id: ":date".into(),
+                id: ";date".into(),
                 delete: 5,
                 trailing: String::new()
             }]
@@ -165,21 +165,21 @@ mod tests {
 
     #[test]
     fn prefix_triggers_wait_for_next_key() {
-        let t = vec![trig(":sig", false), trig(":sign", false)];
+        let t = vec![trig(";sig", false), trig(";sign", false)];
         let mut m = Matcher::default();
-        assert!(typed(&mut m, ":sig", &t).is_empty());
+        assert!(typed(&mut m, ";sig", &t).is_empty());
         assert_eq!(
             typed(&mut m, " ", &t),
             vec![Hit {
-                id: ":sig".into(),
+                id: ";sig".into(),
                 delete: 5,
                 trailing: " ".into()
             }]
         );
         let mut m = Matcher::default();
-        assert_eq!(typed(&mut m, ":sign", &t)[0].id, ":sign");
+        assert_eq!(typed(&mut m, ";sign", &t)[0].id, ";sign");
         let mut m = Matcher::default();
-        let hits = typed(&mut m, ":sig\n", &t);
+        let hits = typed(&mut m, ";sig\n", &t);
         assert_eq!(hits[0].trailing, "\n");
     }
 
@@ -201,5 +201,17 @@ mod tests {
         let mut m = Matcher::default();
         assert!(typed(&mut m, "abtw", &t).is_empty());
         assert_eq!(typed(&mut m, " btw", &t).len(), 1);
+    }
+
+    #[test]
+    fn semicolon_triggers_avoid_everyday_text() {
+        let t = vec![trig(";fu", true), trig(";sig", true)];
+        let mut m = Matcher::default();
+        // Code and prose with colons and semicolons don't fire.
+        assert!(typed(&mut m, "Self::full_name(); x;fu", &t).is_empty());
+        m.reset();
+        // At the start of a line or after a space, they do.
+        assert_eq!(typed(&mut m, ";fu", &t)[0].id, ";fu");
+        assert_eq!(typed(&mut m, "Thanks ;sig", &t)[0].id, ";sig");
     }
 }
