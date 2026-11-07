@@ -63,7 +63,6 @@ fn main() {
             let handle = app.handle().clone();
             palette::setup(&handle);
             dropdown::setup(&handle);
-            dropdown::start_demo(&handle);
             settings::setup(&handle);
             tray::build(&handle)?;
 

@@ -1,15 +1,20 @@
 //! The caret dropdown: a short list of snippets shown next to the text cursor.
 //!
 //! The window never takes focus, so the app being typed into keeps its cursor.
+//! The engine decides when to open it; this module draws it and tracks which
+//! row is highlighted.
 
+use crate::matcher::Suggestion;
 use crate::platform::{self, CaretPosition};
+use crate::state::AppState;
+use crate::template;
 use serde::Serialize;
-use std::thread;
-use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
 pub const LABEL: &str = "dropdown";
 
+/// Most rows shown at once.
+const MAX_ROWS: usize = 6;
 /// Window width in logical pixels.
 const WIDTH: f64 = 300.0;
 /// Logical pixels for one row, the list's padding, and the preview strip.
@@ -20,11 +25,11 @@ const PREVIEW_HEIGHT: f64 = 68.0;
 const GAP: f64 = 4.0;
 
 #[derive(Clone, Serialize)]
-pub struct Row {
-    pub trigger: String,
-    pub name: String,
+struct Row {
+    trigger: String,
+    name: String,
     /// True when picking it opens a fill-in form first.
-    pub form: bool,
+    form: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -32,6 +37,22 @@ struct Rows {
     rows: Vec<Row>,
     selected: usize,
     preview: String,
+}
+
+/// An open dropdown: what it lists, which row is highlighted, and where it sits.
+pub struct Menu {
+    ids: Vec<String>,
+    selected: usize,
+    /// What the user has typed so far, which is erased when a snippet is picked.
+    pub typed: String,
+    caret: CaretPosition,
+}
+
+impl Menu {
+    /// The snippet that Enter or Tab would insert.
+    pub fn selected_id(&self) -> Option<String> {
+        self.ids.get(self.selected).cloned()
+    }
 }
 
 /// A rectangle in screen pixels.
@@ -71,23 +92,102 @@ fn place(caret: Area, size: (i32, i32), gap: i32, screen: Area) -> (i32, i32) {
     (x, y)
 }
 
-/// Shows `rows` next to the caret without taking focus.
-pub fn show_at(
+/// The first couple of non-blank lines of a snippet, as written. Placeholders
+/// stay as typed so nothing (the clipboard, say) is read just to draw a preview.
+fn preview_of(body: &str) -> String {
+    body.lines()
+        .map(str::trim_end)
+        .filter(|line| !line.trim().is_empty())
+        .take(2)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Opens the dropdown for `suggestion`, or updates it if `previous` is open.
+/// Returns `None` (and closes it) when the app won't say where its text cursor
+/// is: typing and instant expansion carry on as usual, just without a list.
+pub fn open(
     app: &AppHandle,
-    caret: &CaretPosition,
-    rows: &[Row],
-    selected: usize,
-    preview: &str,
-) {
+    state: &AppState,
+    suggestion: Suggestion,
+    previous: Option<Menu>,
+) -> Option<Menu> {
+    let mut ids = suggestion.ids;
+    ids.truncate(MAX_ROWS);
+
+    // The list stays where it opened while the user types, instead of
+    // following the cursor and jittering.
+    let caret = match &previous {
+        Some(menu) => Some(menu.caret),
+        None => platform::caret_position(),
+    };
+    let Some(caret) = caret else {
+        close(app);
+        return None;
+    };
+    let selected = match &previous {
+        Some(menu) if menu.ids == ids => menu.selected,
+        _ => 0,
+    };
+
+    let menu = Menu {
+        ids,
+        selected,
+        typed: suggestion.text,
+        caret,
+    };
+    render(app, state, &menu);
+    platform::set_list_keys(true);
+    Some(menu)
+}
+
+/// Moves the highlight up (`-1`) or down (`1`), wrapping around.
+pub fn select(app: &AppHandle, state: &AppState, menu: &mut Menu, step: isize) {
+    let count = menu.ids.len() as isize;
+    if count == 0 {
+        return;
+    }
+    menu.selected = (menu.selected as isize + step).rem_euclid(count) as usize;
+    render(app, state, menu);
+    platform::set_list_keys(true);
+}
+
+/// Hides the dropdown and gives the arrow, Enter, Tab and Esc keys back.
+pub fn close(app: &AppHandle) {
+    platform::set_list_keys(false);
+    if let Some(w) = window(app) {
+        let _ = w.hide();
+    }
+}
+
+fn render(app: &AppHandle, state: &AppState, menu: &Menu) {
     let Some(w) = window(app) else { return };
     let Ok(hwnd) = w.hwnd() else { return };
     let Some(monitor) = app
-        .monitor_from_point(caret.left as f64, caret.top as f64)
+        .monitor_from_point(menu.caret.left as f64, menu.caret.top as f64)
         .ok()
         .flatten()
     else {
         return;
     };
+
+    let store = state.store.read().unwrap();
+    let mut rows = Vec::new();
+    let mut preview = String::new();
+    for (index, id) in menu.ids.iter().enumerate() {
+        let Some(snippet) = store.get(id) else {
+            continue;
+        };
+        if index == menu.selected {
+            preview = preview_of(&snippet.body);
+        }
+        rows.push(Row {
+            trigger: snippet.trigger.clone().unwrap_or_default(),
+            name: snippet.name.clone(),
+            form: !template::fields(&template::parse(&snippet.body)).is_empty(),
+        });
+    }
+    drop(store);
 
     let scale = monitor.scale_factor();
     let height = LIST_PADDING + ROW_HEIGHT * rows.len() as f64 + PREVIEW_HEIGHT;
@@ -98,73 +198,24 @@ pub fn show_at(
         right: monitor.position().x + monitor.size().width as i32,
         bottom: monitor.position().y + monitor.size().height as i32,
     };
-    let caret_area = Area {
-        left: caret.left,
-        top: caret.top,
-        right: caret.right,
-        bottom: caret.bottom,
+    let caret = Area {
+        left: menu.caret.left,
+        top: menu.caret.top,
+        right: menu.caret.right,
+        bottom: menu.caret.bottom,
     };
-    let (x, y) = place(caret_area, size, (GAP * scale) as i32, screen);
+    let (x, y) = place(caret, size, (GAP * scale) as i32, screen);
 
     let _ = app.emit_to(
         LABEL,
         "dropdown-rows",
         Rows {
-            rows: rows.to_vec(),
-            selected,
-            preview: preview.to_string(),
+            rows,
+            selected: menu.selected,
+            preview,
         },
     );
     platform::place_without_activating(hwnd.0 as isize, x, y, size.0, size.1);
-}
-
-pub fn hide(app: &AppHandle) {
-    if let Some(w) = window(app) {
-        let _ = w.hide();
-    }
-}
-
-/// Demo for checking the window by hand: with `BLOOM_DROPDOWN_DEMO` set, a
-/// fixed list follows the text cursor in whatever app has focus. The real
-/// triggering arrives with the key handling in a later step.
-pub fn start_demo(app: &AppHandle) {
-    if std::env::var_os("BLOOM_DROPDOWN_DEMO").is_none() {
-        return;
-    }
-    let rows = vec![
-        Row {
-            trigger: ";sig".into(),
-            name: "Email signature".into(),
-            form: false,
-        },
-        Row {
-            trigger: ";fu".into(),
-            name: "Meeting follow-up".into(),
-            form: true,
-        },
-        Row {
-            trigger: ";date".into(),
-            name: "Today's date".into(),
-            form: false,
-        },
-    ];
-    let preview = "Hi {{field:Name}},\n\nThanks for meeting on {{date}}.";
-    let handle = app.clone();
-    let spawned = thread::Builder::new()
-        .name("bloom-dropdown-demo".into())
-        .spawn(move || {
-            loop {
-                thread::sleep(Duration::from_millis(250));
-                let in_own_window = platform::is_own_window(platform::foreground_window());
-                match platform::caret_position() {
-                    Some(caret) if !in_own_window => show_at(&handle, &caret, &rows, 1, preview),
-                    _ => hide(&handle),
-                }
-            }
-        });
-    if spawned.is_err() {
-        eprintln!("bloom: couldn't start the dropdown demo");
-    }
 }
 
 #[cfg(test)]
@@ -224,5 +275,14 @@ mod tests {
             bottom: 100,
         };
         assert_eq!(place(caret(10, 40), (300, 150), 4, short).1, 0);
+    }
+
+    #[test]
+    fn preview_skips_blank_lines_and_keeps_placeholders() {
+        let body = "Hi {{field:Name}},\n\nThanks for meeting on {{date}}.\n\nBest";
+        assert_eq!(
+            preview_of(body),
+            "Hi {{field:Name}},\nThanks for meeting on {{date}}."
+        );
     }
 }
