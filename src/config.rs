@@ -27,6 +27,9 @@ pub struct Config {
     /// Show a short list of matching snippets at the text cursor while a
     /// trigger is being typed.
     pub suggestions: bool,
+    /// Erase an expansion and type its trigger back when Backspace is the very
+    /// next key.
+    pub undo_with_backspace: bool,
 }
 
 impl Default for Config {
@@ -36,6 +39,7 @@ impl Default for Config {
             inject: InjectMode::Auto,
             clipboard_threshold: 80,
             suggestions: true,
+            undo_with_backspace: true,
         }
     }
 }
@@ -57,6 +61,10 @@ clipboard_threshold = 80
 # Show a short list of matching snippets at your text cursor after you type the
 # first few characters of a trigger. Up/Down move, Enter or Tab inserts, Esc closes.
 suggestions = true
+
+# Press Backspace right after an expansion to erase it and get your trigger
+# back. Any other key, or a click, means you have moved on.
+undo_with_backspace = true
 "#;
 
 const DEFAULT_SNIPPETS: &str = r#"# Your snippets. Bloom reloads this folder as soon as you save a file.
@@ -213,6 +221,7 @@ pub fn save(paths: &Paths, config: &Config) -> Result<()> {
     });
     doc["clipboard_threshold"] = toml_edit::value(config.clipboard_threshold as i64);
     doc["suggestions"] = toml_edit::value(config.suggestions);
+    doc["undo_with_backspace"] = toml_edit::value(config.undo_with_backspace);
     crate::files::write_atomic(&paths.config_file, &doc.to_string())?;
     Ok(())
 }
@@ -285,5 +294,37 @@ mod tests {
     fn the_starter_file_documents_suggestions() {
         let config: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
         assert!(config.suggestions);
+    }
+
+    #[test]
+    fn undo_is_on_by_default_and_for_older_files() {
+        assert!(Config::default().undo_with_backspace);
+        let paths = temp_paths("undo-older");
+        // A bloom.toml written before the setting existed has no such key.
+        fs::write(&paths.config_file, "hotkey = \"Ctrl+Shift+Space\"\n").unwrap();
+        let (config, error) = load(&paths);
+        assert!(error.is_none());
+        assert!(config.undo_with_backspace);
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn turning_undo_off_is_saved_and_read_back() {
+        let paths = temp_paths("undo-off");
+        let config = Config {
+            undo_with_backspace: false,
+            ..Config::default()
+        };
+        save(&paths, &config).unwrap();
+        let loaded = load(&paths).0;
+        assert!(!loaded.undo_with_backspace);
+        assert!(loaded.suggestions, "other settings are untouched");
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn the_starter_file_documents_undo() {
+        let config: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+        assert!(config.undo_with_backspace);
     }
 }

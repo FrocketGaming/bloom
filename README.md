@@ -95,6 +95,17 @@ signoff = ["Best", "Cheers", "Kind regards"]
 - **The Variables page** shows how many snippets use each variable and offers an **Add** button for names that snippets use but nothing defines. The **Variable** drop-down above a snippet's text inserts a placeholder for you.
 - **Comments in the file are kept** when the page saves it. If the file has a syntax error, Bloom leaves it alone and says so, and an entry it cannot read is never deleted by a save.
 
+## Undoing an expansion
+
+If Bloom expands something you didn't mean to, press **Backspace** straight away. It erases the expansion and types your trigger back, so you are exactly where you were before it fired.
+
+- **It has to be the very next key.** Any other key, a mouse click or switching windows means you have moved on, and Backspace deletes one character as usual. There is no time limit.
+- **You can carry on from the restored trigger.** Type the rest of a longer trigger, or press Backspace again and retype the last letter, and Bloom expands it as it normally would.
+- **It works for triggers you typed and for snippets chosen from the suggestion list.** A character you typed straight after a trigger is put back too.
+- **It does not apply** to text inserted from the search window (there was no trigger to put back), to snippets that place the cursor inside the text with `{{cursor}}` (your next key is meant for that spot), or to expansions longer than 1000 characters.
+- **Some older text boxes** delete accents and emoji one piece at a time. After undoing a snippet that contains those, such a box can leave part of that text behind. Bloom never deletes more than it inserted.
+- **To turn it off,** use **Undo with Backspace** under **Settings**, or set `undo_with_backspace = false` in `bloom.toml`.
+
 ## Suggestions while you type
 
 Type a trigger's symbol and the next two characters (`;si`) and a small list opens just below your text cursor, showing the snippets that trigger could still become. The highlighted row also shows the start of its text.

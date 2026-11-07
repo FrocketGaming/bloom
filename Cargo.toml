@@ -20,6 +20,7 @@ tauri-plugin-global-shortcut = "2.4.1"
 tauri-plugin-single-instance = "2.5.5"
 toml = "1.2.1"
 toml_edit = "0.25.19"
+unicode-segmentation = "1.13.3"
 
 # Windows-only: listening, typing and window focus all live behind
 # src/platform/, so the rest of the crate is ready for another target.

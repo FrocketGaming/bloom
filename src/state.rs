@@ -1,5 +1,6 @@
 use crate::config::{Config, Paths};
 use crate::snippets::Store;
+use crate::undo::Undo;
 use crate::variables::Variables;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, RwLock};
@@ -24,6 +25,8 @@ pub struct AppState {
     /// The window that was active before the palette opened; text goes back there.
     pub prev_window: Mutex<Option<isize>>,
     pub pending_form: Mutex<Option<PendingForm>>,
+    /// How to take back the last expansion, until the next key press.
+    pub undo: Mutex<Option<Undo>>,
 }
 
 impl AppState {

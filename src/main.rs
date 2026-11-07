@@ -15,6 +15,7 @@ mod snippets;
 mod state;
 mod template;
 mod tray;
+mod undo;
 mod variables;
 
 use state::AppState;
@@ -40,6 +41,7 @@ fn main() {
         paused: AtomicBool::new(false),
         prev_window: Mutex::new(None),
         pending_form: Mutex::new(None),
+        undo: Mutex::new(None),
     });
 
     tauri::Builder::default()
