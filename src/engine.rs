@@ -15,6 +15,7 @@ use tauri::AppHandle;
 pub fn start(app: AppHandle, state: Arc<AppState>) {
     let (tx, rx) = mpsc::channel();
     platform::start_listener(tx);
+    platform::start_password_watch();
 
     thread::Builder::new()
         .name("bloom-engine".into())
@@ -27,8 +28,12 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
                     matcher.reset();
                     last_window = window;
                 }
-                // Never expand inside Bloom's own windows, or while paused.
-                if state.paused.load(Ordering::Relaxed) || platform::is_own_window(window) {
+                // Never expand inside Bloom's own windows, or while paused. In a
+                // password field, don't even remember what was typed.
+                if state.paused.load(Ordering::Relaxed)
+                    || platform::is_own_window(window)
+                    || platform::password_field_focused()
+                {
                     matcher.reset();
                     continue;
                 }

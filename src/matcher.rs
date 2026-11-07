@@ -35,12 +35,20 @@ pub struct Matcher {
     pending: Option<Pending>,
 }
 
-const MAX_BUF: usize = 96;
-
-/// Longest trigger worth accepting. The buffer above only remembers this much
-/// text, so a longer trigger could never match; the editor says so instead of
-/// saving a snippet that silently never fires.
+/// Longest trigger the editor accepts. Bloom only remembers as much typing as
+/// your longest trigger needs, so this also caps how much it ever holds.
 pub const MAX_TRIGGER: usize = 64;
+
+/// How many typed characters are worth remembering: the longest trigger, plus
+/// the character before it for the start-of-word check. Nothing at all when
+/// there are no triggers.
+fn memory_limit(trigs: &[Trigger]) -> usize {
+    trigs
+        .iter()
+        .map(|t| t.text.len())
+        .max()
+        .map_or(0, |longest| longest + 1)
+}
 
 impl Matcher {
     pub fn reset(&mut self) {
@@ -118,6 +126,7 @@ impl Matcher {
                     len: t.text.len(),
                     id: t.id.clone(),
                 });
+                self.forget_old(memory_limit(trigs));
                 return None;
             }
             self.reset();
@@ -128,10 +137,30 @@ impl Matcher {
             });
         }
 
-        if self.pending.is_none() && self.buf.len() > MAX_BUF {
-            self.buf.drain(..self.buf.len() - MAX_BUF / 2);
-        }
+        self.forget_old(memory_limit(trigs));
         None
+    }
+
+    /// Drops everything older than `limit` characters. A trigger waiting for
+    /// the next key, and the character before it, are always kept; both fit
+    /// within the limit because that trigger can still grow into a real one.
+    fn forget_old(&mut self, limit: usize) {
+        if self.buf.len() <= limit {
+            return;
+        }
+        let mut drop = self.buf.len() - limit;
+        if let Some(p) = &self.pending {
+            drop = drop.min(p.start.saturating_sub(1));
+        }
+        self.buf.drain(..drop);
+        if let Some(p) = &mut self.pending {
+            p.start -= drop;
+        }
+    }
+
+    #[cfg(test)]
+    fn remembered(&self) -> usize {
+        self.buf.len()
     }
 }
 
@@ -218,5 +247,35 @@ mod tests {
         // At the start of a line or after a space, they do.
         assert_eq!(typed(&mut m, ";fu", &t)[0].id, ";fu");
         assert_eq!(typed(&mut m, "Thanks ;sig", &t)[0].id, ";sig");
+    }
+
+    #[test]
+    fn remembers_only_the_longest_trigger_plus_one() {
+        let t = vec![trig(";hi", true), trig(";shrug", true)];
+        let mut m = Matcher::default();
+        typed(&mut m, "my password is hunter2 and more text", &t);
+        assert_eq!(m.remembered(), ";shrug".len() + 1);
+        // Still matches, including the start-of-word check.
+        assert_eq!(typed(&mut m, " ;shrug", &t)[0].id, ";shrug");
+        assert!(typed(&mut m, "x;hi", &t).is_empty());
+    }
+
+    #[test]
+    fn remembers_nothing_without_triggers() {
+        let mut m = Matcher::default();
+        typed(&mut m, "anything at all", &[]);
+        assert_eq!(m.remembered(), 0);
+    }
+
+    #[test]
+    fn a_waiting_trigger_survives_trimming() {
+        // ";s" could still become ";sign", so it waits; trimming must keep it.
+        let t = vec![trig(";s", false), trig(";sign", false)];
+        let mut m = Matcher::default();
+        assert!(typed(&mut m, "lots of earlier text ;s", &t).is_empty());
+        assert!(m.remembered() <= ";sign".len() + 1);
+        let hits = typed(&mut m, "!", &t);
+        assert_eq!(hits[0].id, ";s");
+        assert_eq!(hits[0].trailing, "!");
     }
 }
