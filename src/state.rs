@@ -1,6 +1,7 @@
 use crate::config::{Config, Paths};
 use crate::snippets::Store;
 use crate::undo::Undo;
+use crate::usage::Usage;
 use crate::variables::Variables;
 use std::sync::atomic::AtomicBool;
 use std::sync::{Mutex, RwLock};
@@ -27,6 +28,8 @@ pub struct AppState {
     pub pending_form: Mutex<Option<PendingForm>>,
     /// How to take back the last expansion, until the next key press.
     pub undo: Mutex<Option<Undo>>,
+    /// How often and how recently each snippet is used.
+    pub usage: Mutex<Usage>,
 }
 
 impl AppState {

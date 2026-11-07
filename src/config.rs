@@ -155,6 +155,8 @@ pub struct Paths {
     /// Beside `bloom.toml`, not in the snippets folder, which reads every
     /// `.toml` file in it as snippets.
     pub variables_file: PathBuf,
+    /// How often each snippet is used. Written by Bloom, not meant for editing.
+    pub usage_file: PathBuf,
 }
 
 impl Paths {
@@ -166,6 +168,7 @@ impl Paths {
             config_file: root.join("bloom.toml"),
             snippets_dir: root.join("snippets"),
             variables_file: root.join("variables.toml"),
+            usage_file: root.join("usage.toml"),
             root,
         }
     }
@@ -237,6 +240,7 @@ mod tests {
             config_file: root.join("bloom.toml"),
             snippets_dir: root.join("snippets"),
             variables_file: root.join("variables.toml"),
+            usage_file: root.join("usage.toml"),
             root,
         }
     }

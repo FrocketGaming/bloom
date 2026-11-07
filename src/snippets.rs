@@ -340,11 +340,22 @@ pub(crate) fn body_value(body: &str) -> Result<Value> {
 
 /// Calls `on_change` (debounced) whenever a file in the folder changes.
 pub fn watch(dir: &Path, on_change: impl Fn() + Send + 'static) -> Result<()> {
+    watch_matching(dir, |_| true, on_change)
+}
+
+/// Like `watch`, but only reacts to changes of files that `wanted` accepts.
+pub fn watch_matching(
+    dir: &Path,
+    wanted: impl Fn(&Path) -> bool + Send + 'static,
+    on_change: impl Fn() + Send + 'static,
+) -> Result<()> {
     use notify_debouncer_mini::{DebounceEventResult, new_debouncer, notify::RecursiveMode};
     let mut debouncer = new_debouncer(
         Duration::from_millis(250),
         move |res: DebounceEventResult| {
-            if res.is_ok() {
+            if let Ok(events) = res
+                && events.iter().any(|event| wanted(&event.path))
+            {
                 on_change();
             }
         },
