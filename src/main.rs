@@ -12,6 +12,7 @@ mod palette;
 mod platform;
 mod settings;
 mod snippets;
+mod startup;
 mod state;
 mod template;
 mod tray;
@@ -76,6 +77,8 @@ fn main() {
             dropdown::setup(&handle);
             settings::setup(&handle);
             tray::build(&handle)?;
+
+            startup::sync_at_startup(&state.config.read().unwrap());
 
             let hotkey = state.config.read().unwrap().hotkey.clone();
             if let Err(e) = hotkey::register(&handle, &hotkey, None) {

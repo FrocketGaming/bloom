@@ -17,6 +17,16 @@ The installer isn't code-signed yet, so Windows may show "Windows protected your
 
 Bloom runs in the system tray. Click the flower icon to open the snippet editor, or right-click it for more options. Uninstalling from Windows Settings removes the app but keeps your snippets in `%APPDATA%\Bloom`.
 
+### Starting with Windows
+
+A new install starts Bloom when you sign in to Windows, so your snippets work without opening it first. If you installed Bloom before this setting existed, the Bloom window asks once whether to turn it on, with **Yes, start with Windows** and **No, thanks**, and nothing about your startup list changes until you answer.
+
+- **To change it later,** use **Start Bloom with Windows** under **Settings**, or set `start_with_windows = true` or `false` in `bloom.toml`. Leave the line out and Bloom asks again.
+- **How it works:** Bloom keeps one `Bloom` entry in your own startup list (the current-user `Run` key), pointing at the installed program. It needs no admin rights, and if you move or reinstall Bloom the entry is corrected the next time it starts.
+- **Windows has the last word.** If Bloom doesn't start, check that it is switched on under **Settings, Apps, Startup** in Windows.
+- **Uninstalling** removes the entry. Upgrading keeps it.
+- **Running from source** (`cargo run`) never touches your startup list on its own.
+
 ## Building from source
 
 You need [Rust](https://rustup.rs) with the MSVC toolchain, and the Visual Studio C++ Build Tools.
