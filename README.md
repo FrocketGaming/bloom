@@ -75,6 +75,10 @@ Starting triggers with `;` is recommended: a semicolon is almost never followed 
 
 Settings such as the hotkey are in `%APPDATA%\Bloom\bloom.toml`, or under **Settings** in the Bloom window.
 
+### Deleting a snippet file
+
+To remove a snippet file you no longer need, such as an empty `python.toml`, hover over its group header in the Bloom window and click the trash button. The dialog says how many snippets the file holds. The file is moved to the **Recycle Bin**, so you can restore it from there and Bloom picks it up again. If Windows cannot move it, or you decline when it asks, the file is left where it is. A file with no snippets is still listed, marked **empty**, so it can be removed.
+
 ## Your own variables
 
 Define something once and use it in any snippet as `{{var:name}}`, instead of retyping it in every snippet. Open **Variables** in the Bloom window to add them, or edit `%APPDATA%\Bloom\variables.toml` yourself; Bloom reloads it as soon as you save.
