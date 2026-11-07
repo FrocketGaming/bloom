@@ -26,7 +26,6 @@ pub struct AppState {
     pub prev_window: Mutex<Option<isize>>,
     pub pending_form: Mutex<Option<PendingForm>>,
     /// How to take back the last expansion, until the next key press.
-    #[expect(dead_code, reason = "used once the engine takes back expansions")]
     pub undo: Mutex<Option<Undo>>,
 }
 

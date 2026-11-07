@@ -86,10 +86,6 @@ impl Matcher {
     /// Bloom's own typing is invisible to the matcher, so after it types a
     /// trigger back for the user, this lets them carry on from there: finish a
     /// longer trigger, or delete a character and retype it.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used once the engine takes back expansions")
-    )]
     pub fn seed(&mut self, text: &str) {
         self.reset();
         self.buf.extend(text.chars());

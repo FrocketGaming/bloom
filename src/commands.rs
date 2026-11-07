@@ -115,14 +115,19 @@ pub fn insert_snippet(
         return Ok(InsertResult::NeedsForm { fields });
     }
 
-    let trailing = state
+    // A form that a typed trigger opened remembers what was typed. One opened
+    // from the search hotkey has no trigger, so there is nothing to type back
+    // and the insertion cannot be taken back with Backspace.
+    let form = state
         .pending_form
         .lock()
         .unwrap()
         .take()
-        .filter(|f| f.id == id)
-        .map(|f| f.trailing)
-        .unwrap_or_default();
+        .filter(|f| f.id == id);
+    let (trailing, typed) = match form {
+        Some(f) => (f.trailing, Some(f.restore)),
+        None => (String::new(), None),
+    };
     let rendered = template::render(&segs, &values.unwrap_or_default());
     let prev = state.prev_window.lock().unwrap().take();
     palette::hide(&app);
@@ -135,6 +140,9 @@ pub fn insert_snippet(
         }
         thread::sleep(Duration::from_millis(90));
         engine::deliver(&st, &rendered.text, &trailing, rendered.cursor_back);
+        if let Some(typed) = typed {
+            engine::remember_undo(&st, &rendered.text, &trailing, rendered.cursor_back, typed);
+        }
     });
     Ok(InsertResult::Inserted)
 }

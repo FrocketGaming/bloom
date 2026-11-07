@@ -3,6 +3,7 @@
 use crate::config::InjectMode;
 use crate::matcher::{Hit, KeyEvent, Matcher, Nav};
 use crate::state::{AppState, PendingForm};
+use crate::undo::{self, Undo};
 use crate::{dropdown, palette, platform, template};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -28,6 +29,9 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
             let mut dismissed = false;
             let mut last_window = 0isize;
             for ev in rx {
+                // Any key ends the chance to take back the last expansion, so it
+                // is taken out here and only used if this key is Backspace.
+                let undo = state.undo.lock().unwrap().take();
                 let window = platform::foreground_window();
                 if window != last_window {
                     matcher.reset();
@@ -42,6 +46,13 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
                 {
                     matcher.reset();
                     close_menu(&app, &mut menu);
+                    continue;
+                }
+                if ev == KeyEvent::Backspace
+                    && let Some(undo) = undo
+                    && undo.window == window
+                {
+                    take_back(&mut matcher, undo);
                     continue;
                 }
                 if let KeyEvent::Nav(nav) = ev {
@@ -73,6 +84,38 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
             }
         })
         .expect("spawn engine thread");
+}
+
+/// Backspace right after an expansion: erase it and type the trigger back.
+fn take_back(matcher: &mut Matcher, undo: Undo) {
+    // The Backspace the user pressed has already removed the last character,
+    // and Bloom waits for their typing to settle before adding its own.
+    platform::wait_for_typing_to_settle();
+    platform::backspace(undo.erase.saturating_sub(1));
+    platform::type_text(&undo.restore);
+    // Bloom's own typing is invisible to the matcher; tell it what is on
+    // screen, so the user can carry on from the restored trigger.
+    matcher.seed(&undo.restore);
+}
+
+/// Remembers how to take back an expansion that was just delivered, or forgets
+/// the previous one if this expansion cannot be taken back. `typed` is what the
+/// user had typed before the expansion replaced it.
+pub fn remember_undo(
+    state: &AppState,
+    text: &str,
+    trailing: &str,
+    cursor_back: Option<usize>,
+    typed: String,
+) {
+    let inserted = format!("{text}{trailing}");
+    let undo = undo::plan(
+        platform::foreground_window(),
+        &inserted,
+        cursor_steps(cursor_back, trailing),
+        typed,
+    );
+    *state.undo.lock().unwrap() = undo;
 }
 
 fn close_menu(app: &AppHandle, menu: &mut Option<dropdown::Menu>) {
@@ -129,22 +172,25 @@ fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit, restore: Option<Stri
     platform::wait_for_typing_to_settle();
     platform::backspace(hit.delete);
 
+    // What the user typed, erased above to make way for the expansion. It is
+    // put back if a form is cancelled, or if the expansion is taken back.
+    let typed = restore.unwrap_or_else(|| {
+        format!(
+            "{}{}",
+            snippet.trigger.as_deref().unwrap_or_default(),
+            hit.trailing
+        )
+    });
+
     if !template::fields(&segs).is_empty() {
         // The trigger is erased before the palette opens, so remember it:
         // pressing Esc has to leave the user with the text they typed rather
         // than nothing at all.
-        let restore = restore.unwrap_or_else(|| {
-            format!(
-                "{}{}",
-                snippet.trigger.as_deref().unwrap_or_default(),
-                hit.trailing
-            )
-        });
         *state.prev_window.lock().unwrap() = Some(platform::foreground_window());
         *state.pending_form.lock().unwrap() = Some(PendingForm {
             id: snippet.id.clone(),
             trailing: hit.trailing,
-            restore,
+            restore: typed,
         });
         palette::open(app, Some(snippet.id));
         return;
@@ -152,6 +198,13 @@ fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit, restore: Option<Stri
 
     let rendered = template::render(&segs, &HashMap::new());
     deliver(state, &rendered.text, &hit.trailing, rendered.cursor_back);
+    remember_undo(
+        state,
+        &rendered.text,
+        &hit.trailing,
+        rendered.cursor_back,
+        typed,
+    );
 }
 
 /// How far left of the end of the inserted text the cursor goes. A body with a

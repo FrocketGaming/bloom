@@ -9,10 +9,6 @@ use unicode_segmentation::UnicodeSegmentation;
 
 /// The longest expansion that can be taken back. Erasing more than this means
 /// that many key presses, which is slow and not worth the risk.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used once the engine takes back expansions")
-)]
 pub const MAX_ERASE: usize = 1000;
 
 /// What it takes to undo the last expansion.
@@ -33,16 +29,15 @@ pub struct Undo {
 ///
 /// `cursor_steps` is how far left of the end the cursor was put; `typed` is the
 /// text that was erased to make way for the expansion.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used once the engine takes back expansions")
-)]
 pub fn plan(window: isize, inserted: &str, cursor_steps: usize, typed: String) -> Option<Undo> {
     if cursor_steps != 0 || typed.is_empty() {
         return None;
     }
-    // Backspace removes one character as displayed, so an emoji with a skin
-    // tone or an accented letter built from two code points counts once.
+    // Most apps remove one character as displayed with each Backspace, so an
+    // emoji with a skin tone, or an accented letter built from two code points,
+    // counts once. A few older controls remove one code point at a time and
+    // would leave part of such text behind. Counting this way errs towards
+    // leaving text, never towards removing something the user typed.
     let erase = inserted.graphemes(true).count();
     if erase == 0 || erase > MAX_ERASE {
         return None;
