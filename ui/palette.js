@@ -20,7 +20,7 @@ function subseq(needle, hay) {
 function search(query) {
   const qq = query.toLowerCase().trim();
   if (!qq) return all.slice();
-  const bare = qq.replace(/^:/, '');
+  const bare = qq.replace(/^[^\p{L}\p{N}]+/u, '');
   const scored = [];
   for (const s of all) {
     const t = (s.trigger || '').toLowerCase();
@@ -40,7 +40,7 @@ function search(query) {
 }
 
 function highlight(text, query) {
-  const bare = query.toLowerCase().replace(/^:/, '').trim();
+  const bare = query.toLowerCase().replace(/^[^\p{L}\p{N}]+/u, '').trim();
   const i = bare ? text.toLowerCase().indexOf(bare) : -1;
   if (i < 0) return esc(text);
   return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + bare.length)) + '</mark>' + esc(text.slice(i + bare.length));
@@ -182,9 +182,10 @@ $('form-view').addEventListener('submit', async (e) => {
     $('f-prev').textContent = String(err);
   }
 });
-// Enter inside a <select> doesn't submit by default.
+// Submit on Enter from any field. Browsers only do this by themselves when a
+// form has exactly one text box, so snippets with several fields need it.
 $('fields').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.tagName === 'SELECT') { e.preventDefault(); $('form-view').requestSubmit(); }
+  if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); $('form-view').requestSubmit(); }
 });
 
 // ---------- Window ----------
