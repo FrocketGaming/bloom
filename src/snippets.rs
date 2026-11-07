@@ -299,7 +299,7 @@ fn set_opt(tbl: &mut Table, key: &str, v: Option<String>) {
 }
 
 /// Multi-line bodies are written as `"""` blocks so the files stay readable.
-fn body_value(body: &str) -> Result<Value> {
+pub(crate) fn body_value(body: &str) -> Result<Value> {
     if !body.contains('\n') {
         return Ok(Value::from(body.to_string()));
     }

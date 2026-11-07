@@ -156,6 +156,7 @@ pub struct SettingsView {
 pub fn get_settings(state: S) -> SettingsView {
     let store = state.store.read().unwrap();
     let mut errors = store.errors.clone();
+    errors.extend(state.variables.read().unwrap().errors.iter().cloned());
     if let Some(e) = state.config_error.read().unwrap().clone() {
         errors.insert(0, e);
     }
