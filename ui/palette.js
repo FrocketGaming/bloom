@@ -20,7 +20,7 @@ function subseq(needle, hay) {
 function search(query) {
   const qq = query.toLowerCase().trim();
   if (!qq) return all.slice();
-  const bare = qq.replace(/^:/, '');
+  const bare = qq.replace(/^[^\p{L}\p{N}]+/u, '');
   const scored = [];
   for (const s of all) {
     const t = (s.trigger || '').toLowerCase();
@@ -40,7 +40,7 @@ function search(query) {
 }
 
 function highlight(text, query) {
-  const bare = query.toLowerCase().replace(/^:/, '').trim();
+  const bare = query.toLowerCase().replace(/^[^\p{L}\p{N}]+/u, '').trim();
   const i = bare ? text.toLowerCase().indexOf(bare) : -1;
   if (i < 0) return esc(text);
   return esc(text.slice(0, i)) + '<mark>' + esc(text.slice(i, i + bare.length)) + '</mark>' + esc(text.slice(i + bare.length));

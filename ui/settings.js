@@ -140,7 +140,7 @@ function newSnippet() {
   $('ed-name').value = '';
   $('ed-trigger').value = '';
   $('ed-body').value = '';
-  $('ed-word').checked = false;
+  $('ed-word').checked = true;
   fillFileSelect(null);
   $('ed-file').disabled = false;
   $('delete').hidden = true;
