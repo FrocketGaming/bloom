@@ -177,3 +177,22 @@ code { font: 12.5px var(--mono); background: var(--chip); padding: 4px 8px; bord
 .dlg h2 { margin: 0 0 8px; font: 600 17px/1.3 var(--display); }
 .dlg p { margin: 0; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
 .dlg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+
+/* Drop-down lists. Where the browser allows it, the open list is drawn by the
+   page, so it follows the theme instead of the system's light popup. Older
+   browsers keep the system popup, but with readable, opaque colours. */
+select option { background-color: var(--field); color: var(--ink); }
+@supports (appearance: base-select) {
+  select, ::picker(select) { appearance: base-select; }
+  ::picker(select) {
+    padding: 4px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--ink);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .28);
+  }
+  select option { padding: 7px 10px; border-radius: 6px; background: transparent; cursor: pointer; }
+  select option:hover, select option:focus-visible { background: var(--hover); }
+  select option:checked { background: var(--sel); }
+  select option::checkmark { display: none; }
+  select option:disabled { color: var(--muted); cursor: default; }
+  select option:focus-visible { outline: none; }
+  select::picker-icon { color: var(--muted); font-size: .8em; }
+}
