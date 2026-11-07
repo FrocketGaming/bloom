@@ -115,6 +115,9 @@ function selectRow(i, scroll) {
   const s = items[sel];
   $('prev').hidden = !s;
   if (s) $('prev').innerHTML = `<div class="prev-label">Inserts</div><pre class="prev-body">${partsHTML(s.preview)}</pre>`;
+  // A longer preview makes the content taller, and the window has to follow or
+  // the whole panel grows a second scrollbar beside the list's.
+  fit();
 }
 
 function move(d) {
