@@ -82,6 +82,19 @@ impl Matcher {
         self.pending = None;
     }
 
+    /// Makes the matcher believe `text` was just typed, without matching it.
+    /// Bloom's own typing is invisible to the matcher, so after it types a
+    /// trigger back for the user, this lets them carry on from there: finish a
+    /// longer trigger, or delete a character and retype it.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "used once the engine takes back expansions")
+    )]
+    pub fn seed(&mut self, text: &str) {
+        self.reset();
+        self.buf.extend(text.chars());
+    }
+
     pub fn feed(&mut self, ev: KeyEvent, trigs: &[Trigger]) -> Option<Hit> {
         match ev {
             KeyEvent::Reset => {
@@ -341,6 +354,29 @@ mod tests {
 
     fn suggested(m: &Matcher, t: &[Trigger]) -> Vec<String> {
         m.suggest(t).map(|s| s.ids).unwrap_or_default()
+    }
+
+    #[test]
+    fn seeded_text_can_be_finished_into_a_trigger() {
+        let t = vec![trig(";sign", true)];
+        let mut m = Matcher::default();
+        m.seed(";sig");
+        assert!(
+            m.suggest(&t).is_some(),
+            "the list can open from seeded text"
+        );
+        assert_eq!(typed(&mut m, "n", &t)[0].id, ";sign");
+    }
+
+    #[test]
+    fn seeding_does_not_match_by_itself_and_replaces_what_was_there() {
+        let t = vec![trig(";hi", true)];
+        let mut m = Matcher::default();
+        typed(&mut m, "old", &t);
+        m.seed(";hi");
+        // Nothing fires until the next key arrives, and the old text is gone.
+        assert_eq!(m.remembered(), 3);
+        assert!(typed(&mut m, "x", &t).is_empty());
     }
 
     #[test]
