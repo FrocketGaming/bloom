@@ -104,13 +104,6 @@ impl Variables {
     }
 
     /// Finds a variable by name. Names ignore case, like the built-in placeholders.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "used once snippets and the editor read and write variables"
-        )
-    )]
     pub fn get(&self, name: &str) -> Option<&Variable> {
         let wanted = name.trim().to_lowercase();
         self.list.iter().find(|v| v.name.to_lowercase() == wanted)

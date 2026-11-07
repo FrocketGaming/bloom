@@ -27,17 +27,20 @@ pub struct SnippetView {
     word: bool,
     preview: Vec<Part>,
     fields: Vec<FieldSpec>,
+    /// `{{var:name}}` names in the body that no variable has.
+    missing: Vec<String>,
 }
 
 #[tauri::command]
 pub fn list_snippets(state: S) -> Vec<SnippetView> {
     let store = state.store.read().unwrap();
+    let variables = state.variables.read().unwrap();
     // Every body is parsed once, and the clipboard is read at most once rather
     // than once per snippet that uses {{clipboard}}.
     let parsed: Vec<Vec<template::Seg>> = store
         .snippets
         .iter()
-        .map(|s| template::parse(&s.body))
+        .map(|s| template::parse_resolved(&s.body, &variables))
         .collect();
     let clipboard = parsed
         .iter()
@@ -59,6 +62,7 @@ pub fn list_snippets(state: S) -> Vec<SnippetView> {
             word: s.word,
             preview: template::preview(&segs, clipboard.as_deref()),
             fields: template::fields(&segs),
+            missing: template::missing(&segs),
         })
         .collect()
 }
@@ -67,17 +71,19 @@ pub fn list_snippets(state: S) -> Vec<SnippetView> {
 pub struct BodyPreview {
     preview: Vec<Part>,
     fields: Vec<FieldSpec>,
+    missing: Vec<String>,
 }
 
 #[tauri::command]
-pub fn preview_body(body: String) -> BodyPreview {
-    let segs = template::parse(&body);
+pub fn preview_body(state: S, body: String) -> BodyPreview {
+    let segs = template::parse_resolved(&body, &state.variables.read().unwrap());
     let clipboard = template::uses_clipboard(&segs)
         .then(template::read_clipboard)
         .flatten();
     BodyPreview {
         preview: template::preview(&segs, clipboard.as_deref()),
         fields: template::fields(&segs),
+        missing: template::missing(&segs),
     }
 }
 
@@ -102,7 +108,7 @@ pub fn insert_snippet(
         .get(&id)
         .cloned()
         .ok_or("This snippet was changed or removed. Search again.")?;
-    let segs = template::parse(&snippet.body);
+    let segs = template::parse_resolved(&snippet.body, &state.variables.read().unwrap());
     let fields = template::fields(&segs);
     if !fields.is_empty() && values.is_none() {
         return Ok(InsertResult::NeedsForm { fields });
