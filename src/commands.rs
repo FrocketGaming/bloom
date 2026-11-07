@@ -159,6 +159,14 @@ pub fn get_settings(state: S) -> SettingsView {
     if let Some(e) = state.config_error.read().unwrap().clone() {
         errors.insert(0, e);
     }
+    // Windows refuses input aimed at elevated windows, and there is nowhere
+    // better than here to say so.
+    if platform::take_input_blocked() {
+        errors.insert(
+            0,
+            "Windows refused Bloom's last text insertion. The window you were typing in probably runs as administrator, which blocks input from ordinary apps.".into(),
+        );
+    }
     SettingsView {
         config: state.config.read().unwrap().clone(),
         paused: state.paused.load(Ordering::Relaxed),

@@ -73,6 +73,22 @@ Starting triggers with `;` is recommended: a semicolon is almost never followed 
 
 Settings such as the hotkey are in `%APPDATA%\Bloom\bloom.toml`, or under **Settings** in the Bloom window.
 
+## Using two computers (Mouse Without Borders)
+
+Bloom only reacts to keys that actually reach an app on the PC it runs on. With [Mouse Without Borders](https://learn.microsoft.com/windows/powertoys/mouse-without-borders) sharing one keyboard between PCs:
+
+- **Run Bloom on both PCs.** Type on the PC with the keyboard and it expands there. Move the mouse to the other PC and type, and that PC's Bloom expands in its own windows.
+- **The PC you left stays quiet.** Mouse Without Borders blocks the keys there before they reach any app, and Bloom checks for that, so nothing expands on a screen you aren't typing into.
+- **Use the same keyboard layout on both PCs.** Mouse Without Borders forwards keys, not characters, so a different layout on the second PC turns `;` into something else.
+- **Send the keyboard to one PC at a time.** In Mouse Without Borders' mode that controls all PCs at once, every Bloom would expand the same trigger.
+- **If expansions come out garbled on the second PC,** set **How Bloom inserts text** to **Paste it** there. Typed expansions have dropped or mixed up characters on a PC receiving the keyboard (seen in Notepad), while pasting stays reliable. Share clipboard keeps working: Bloom waits long enough before restoring your clipboard that Mouse Without Borders shares the restored copy, not the snippet.
+
+Bloom's own typing is tagged, so it never expands its own output, while keys replayed by Mouse Without Borders count as real typing. Tools that ignore all simulated keys can't expand on the second PC.
+
+### Windows that run as administrator
+
+Windows blocks ordinary apps from typing into elevated windows, so Bloom can't insert into Task Manager, an elevated terminal, or anything else running as administrator unless Bloom runs elevated too. Bloom notices when Windows refuses its keys and says so the next time you open its window.
+
 ## Development
 
 ```sh
@@ -81,7 +97,7 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 ```
 
-Windows-specific code (keyboard hook, typing, focus) lives in `src/platform/`, so other platforms can be added alongside it.
+Windows-specific code (input listening, key translation, typing and focus) lives in `src/platform/`, so other platforms can be added alongside it.
 
 ## License
 
