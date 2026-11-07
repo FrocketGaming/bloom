@@ -51,6 +51,7 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
                 if ev == KeyEvent::Backspace
                     && let Some(undo) = undo
                     && undo.window == window
+                    && state.config.read().unwrap().undo_with_backspace
                 {
                     take_back(&mut matcher, undo);
                     continue;

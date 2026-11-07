@@ -121,6 +121,14 @@
           <p class="hint">After the first three characters of a trigger, such as <code>;si</code>, a short list of matching snippets opens at your text cursor. Up and Down move, Enter or Tab inserts, Esc closes. Apps that don’t report their cursor position just don’t show it.</p>
         </div>
         <div class="fld">
+          <span>Undo with Backspace</span>
+          <div class="seg" id="undo" role="radiogroup">
+            <button type="button" data-v="on">On</button>
+            <button type="button" data-v="off">Off</button>
+          </div>
+          <p class="hint">Press Backspace right after Bloom expands a snippet to erase it and get the trigger you typed back. Any other key, or a click, means you have moved on, and Backspace works as usual. Snippets that place the cursor inside the text are never undone this way.</p>
+        </div>
+        <div class="fld">
           <span>Snippets folder</span>
           <div class="inline"><code id="folder"></code><button id="open-folder" class="btn" type="button">Open folder</button></div>
           <p class="hint">Snippets are plain TOML files. Edit them in any editor and Bloom reloads them when you save.</p>
