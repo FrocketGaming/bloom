@@ -11,6 +11,7 @@
 //! snippets. Renaming a trigger starts that snippet over.
 
 use crate::files;
+use crate::snippets::Snippet;
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -64,15 +65,26 @@ pub fn now() -> u64 {
 
 /// What identifies a snippet in the record: its trigger, or its file and name
 /// when it has none.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "used once expansions are recorded")
-)]
-pub fn key(trigger: Option<&str>, file: &str, name: &str) -> String {
+fn key(trigger: Option<&str>, file: &str, name: &str) -> String {
     match trigger {
         Some(trigger) => format!("trigger:{trigger}"),
         None => format!("search:{file}::{name}"),
     }
+}
+
+/// What identifies `snippet` in the record.
+pub fn key_of(snippet: &Snippet) -> String {
+    key(snippet.trigger.as_deref(), &snippet.file, &snippet.name)
+}
+
+/// Counts one use of `snippet`.
+pub fn record_use(state: &AppState, snippet: &Snippet) {
+    state.usage.lock().unwrap().record(&key_of(snippet), now());
+}
+
+/// Takes back a use that the user undid.
+pub fn forget_use(state: &AppState, key: &str) {
+    state.usage.lock().unwrap().forget(key, now());
 }
 
 /// `score` after the time between `from` and `to` has passed.
@@ -110,10 +122,6 @@ impl Usage {
     }
 
     /// The score of a snippet at `now`. Zero if it has never been used.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used once the lists are ranked")
-    )]
     pub fn score(&self, key: &str, now: u64) -> f64 {
         self.scores
             .get(key)
@@ -121,10 +129,6 @@ impl Usage {
     }
 
     /// Counts one use.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used once expansions are recorded")
-    )]
     pub fn record(&mut self, key: &str, now: u64) {
         let score = self.score(key, now) + 1.0;
         self.scores.insert(key.to_string(), (score, now));
@@ -132,10 +136,6 @@ impl Usage {
     }
 
     /// Takes back one use, for an expansion the user undid.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used once expansions are recorded")
-    )]
     pub fn forget(&mut self, key: &str, now: u64) {
         if !self.scores.contains_key(key) {
             return;
@@ -147,10 +147,6 @@ impl Usage {
 
     /// Orders `items` with the most used first. Items with equal scores, which
     /// includes everything never used, keep the order they came in.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "used once the lists are ranked")
-    )]
     pub fn rank<T>(&self, items: &mut [T], now: u64, key_of: impl Fn(&T) -> String) {
         items.sort_by(|a, b| {
             self.score(&key_of(b), now)

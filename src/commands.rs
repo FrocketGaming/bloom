@@ -5,7 +5,7 @@ use crate::snippets::{self, SnippetEdit};
 use crate::state::AppState;
 use crate::template::{self, FieldSpec, Part};
 use crate::variables::{self, Content, Variable};
-use crate::{engine, hotkey, matcher, palette, platform, tray};
+use crate::{engine, hotkey, matcher, palette, platform, tray, usage};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -140,8 +140,16 @@ pub fn insert_snippet(
         }
         thread::sleep(Duration::from_millis(90));
         engine::deliver(&st, &rendered.text, &trailing, rendered.cursor_back);
+        usage::record_use(&st, &snippet);
         if let Some(typed) = typed {
-            engine::remember_undo(&st, &rendered.text, &trailing, rendered.cursor_back, typed);
+            engine::remember_undo(
+                &st,
+                &rendered.text,
+                &trailing,
+                rendered.cursor_back,
+                typed,
+                usage::key_of(&snippet),
+            );
         }
     });
     Ok(InsertResult::Inserted)

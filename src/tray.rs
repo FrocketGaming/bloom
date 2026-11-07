@@ -64,7 +64,11 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
                     state.reload_snippets();
                     let _ = app.emit("snippets-changed", ());
                 }
-                "quit" => app.exit(0),
+                "quit" => {
+                    // Changes are written every few seconds; don't lose the last few.
+                    crate::usage::save_now(&state);
+                    app.exit(0)
+                }
                 _ => {}
             }
         })

@@ -4,6 +4,7 @@ use crate::config::InjectMode;
 use crate::matcher::{Hit, KeyEvent, Matcher, Nav};
 use crate::state::{AppState, PendingForm};
 use crate::undo::{self, Undo};
+use crate::usage;
 use crate::{dropdown, palette, platform, template};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -53,7 +54,7 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
                     && undo.window == window
                     && state.config.read().unwrap().undo_with_backspace
                 {
-                    take_back(&mut matcher, undo);
+                    take_back(&state, &mut matcher, undo);
                     continue;
                 }
                 if let KeyEvent::Nav(nav) = ev {
@@ -88,7 +89,7 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
 }
 
 /// Backspace right after an expansion: erase it and type the trigger back.
-fn take_back(matcher: &mut Matcher, undo: Undo) {
+fn take_back(state: &AppState, matcher: &mut Matcher, undo: Undo) {
     // The Backspace the user pressed has already removed the last character,
     // and Bloom waits for their typing to settle before adding its own.
     platform::wait_for_typing_to_settle();
@@ -97,6 +98,8 @@ fn take_back(matcher: &mut Matcher, undo: Undo) {
     // Bloom's own typing is invisible to the matcher; tell it what is on
     // screen, so the user can carry on from the restored trigger.
     matcher.seed(&undo.restore);
+    // A use that was taken back was a mistake, so it should not count.
+    usage::forget_use(state, &undo.usage_key);
 }
 
 /// Remembers how to take back an expansion that was just delivered, or forgets
@@ -108,6 +111,7 @@ pub fn remember_undo(
     trailing: &str,
     cursor_back: Option<usize>,
     typed: String,
+    usage_key: String,
 ) {
     let inserted = format!("{text}{trailing}");
     let undo = undo::plan(
@@ -115,6 +119,7 @@ pub fn remember_undo(
         &inserted,
         cursor_steps(cursor_back, trailing),
         typed,
+        usage_key,
     );
     *state.undo.lock().unwrap() = undo;
 }
@@ -199,12 +204,14 @@ fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit, restore: Option<Stri
 
     let rendered = template::render(&segs, &HashMap::new());
     deliver(state, &rendered.text, &hit.trailing, rendered.cursor_back);
+    usage::record_use(state, &snippet);
     remember_undo(
         state,
         &rendered.text,
         &hit.trailing,
         rendered.cursor_back,
         typed,
+        usage::key_of(&snippet),
     );
 }
 

@@ -20,6 +20,9 @@ pub struct Undo {
     pub erase: usize,
     /// What the user had typed before the expansion, to type back.
     pub restore: String,
+    /// Which snippet was used, so taking the expansion back also takes back the
+    /// use that was counted for it.
+    pub usage_key: String,
 }
 
 /// What to remember about an expansion, or `None` when it cannot be taken back:
@@ -29,7 +32,13 @@ pub struct Undo {
 ///
 /// `cursor_steps` is how far left of the end the cursor was put; `typed` is the
 /// text that was erased to make way for the expansion.
-pub fn plan(window: isize, inserted: &str, cursor_steps: usize, typed: String) -> Option<Undo> {
+pub fn plan(
+    window: isize,
+    inserted: &str,
+    cursor_steps: usize,
+    typed: String,
+    usage_key: String,
+) -> Option<Undo> {
     if cursor_steps != 0 || typed.is_empty() {
         return None;
     }
@@ -46,6 +55,7 @@ pub fn plan(window: isize, inserted: &str, cursor_steps: usize, typed: String) -
         window,
         erase,
         restore: typed,
+        usage_key,
     })
 }
 
@@ -54,7 +64,7 @@ mod tests {
     use super::*;
 
     fn undo(inserted: &str, steps: usize, typed: &str) -> Option<Undo> {
-        plan(7, inserted, steps, typed.to_string())
+        plan(7, inserted, steps, typed.to_string(), "trigger:;x".into())
     }
 
     #[test]
@@ -63,6 +73,7 @@ mod tests {
         assert_eq!(u.erase, 15);
         assert_eq!(u.restore, ";sig");
         assert_eq!(u.window, 7);
+        assert_eq!(u.usage_key, "trigger:;x");
     }
 
     #[test]

@@ -8,6 +8,7 @@ use crate::matcher::Suggestion;
 use crate::platform::{self, CaretPosition};
 use crate::state::AppState;
 use crate::template;
+use crate::usage;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, WebviewWindow};
 
@@ -113,6 +114,9 @@ pub fn open(
     previous: Option<Menu>,
 ) -> Option<Menu> {
     let mut ids = suggestion.ids;
+    // Most used first, and before cutting the list down to what fits, so a
+    // favourite is never left out.
+    rank_by_use(state, &mut ids);
     ids.truncate(MAX_ROWS);
 
     // The list stays where it opened while the user types, instead of
@@ -139,6 +143,15 @@ pub fn open(
     render(app, state, &menu);
     platform::set_list_keys(true);
     Some(menu)
+}
+
+/// Puts the snippets used most (and most recently) first. Snippets with equal
+/// scores, which includes ones never used, keep their order.
+fn rank_by_use(state: &AppState, ids: &mut [String]) {
+    let store = state.store.read().unwrap();
+    state.usage.lock().unwrap().rank(ids, usage::now(), |id| {
+        store.get(id).map(usage::key_of).unwrap_or_default()
+    });
 }
 
 /// Moves the highlight up (`-1`) or down (`1`), wrapping around.
