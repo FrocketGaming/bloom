@@ -144,13 +144,18 @@ $('tree').addEventListener('click', (e) => {
 $('filter').addEventListener('input', renderTree);
 
 function confirmDiscard() {
+  if (view === 'variables') {
+    return !varsDirty || window.confirm('You have unsaved changes to your variables. Discard them?');
+  }
   return !dirty || window.confirm('You have unsaved changes to this snippet. Discard them?');
 }
 
 function showView(v) {
   view = v;
   $('editor').hidden = v !== 'editor';
+  $('variables').hidden = v !== 'variables';
   $('general').hidden = v !== 'general';
+  $('nav-variables').classList.toggle('active', v === 'variables');
   $('nav-settings').classList.toggle('active', v === 'general');
   renderTree();
 }
@@ -304,19 +309,214 @@ function updatePreview() {
   previewTimer = setTimeout(async () => {
     const body = $('ed-body').value;
     if (!body) { $('ed-preview').innerHTML = '<span class="hint">Type the text this snippet should insert.</span>'; $('ed-fields').textContent = ''; return; }
-    const { preview, fields } = await invoke('preview_body', { body });
+    const { preview, fields, missing } = await invoke('preview_body', { body });
     $('ed-preview').innerHTML = preview.map((p) => {
       if (p.kind === 'var') return `<span class="var">${esc(p.text)}</span>`;
+      if (p.kind === 'missing') return `<span class="missing" title="No variable has this name. It is inserted as typed.">${esc(p.text)}</span>`;
       if (p.kind === 'field') return `<span class="field">${esc(p.text)}</span>`;
       if (p.kind === 'cursor') return '<span class="cur" title="Cursor ends here"></span>';
       return esc(p.text);
     }).join('');
-    $('ed-fields').textContent = fields.length
-      ? `· asks for ${fields.map((f) => f.label).join(', ')} before inserting`
-      : '';
+    const notes = [];
+    if (fields.length) notes.push(`asks for ${fields.map((f) => f.label).join(', ')} before inserting`);
+    if (missing.length) {
+      notes.push(`${missing.map((n) => `{{var:${n}}}`).join(', ')} ${missing.length === 1 ? 'isn’t' : 'aren’t'} defined, so ${missing.length === 1 ? 'it is' : 'they are'} inserted as typed`);
+    }
+    $('ed-fields').textContent = notes.map((n) => `· ${n}`).join(' ');
   }, 120);
 }
 $('ed-body').addEventListener('input', updatePreview);
+
+// ---------- Variables ----------
+
+const VAR_NAME = /^[\p{L}\p{N}_-]{1,64}$/u;
+
+let varRows = [];       // what the page is editing
+let varsSaved = '';     // the rows as last loaded or saved
+let varsDirty = false;
+let undefinedNames = []; // used in snippets, defined nowhere
+
+function el(tag, props = {}, ...children) {
+  const node = document.createElement(tag);
+  Object.assign(node, props);
+  node.append(...children);
+  return node;
+}
+
+function rowFrom(v) {
+  return { name: v.name, kind: v.kind, text: v.text, optionsText: v.options.join('\n'), usedIn: v.used_in };
+}
+
+function optionsOf(row) {
+  return row.optionsText.split('\n').map((o) => o.trim()).filter(Boolean);
+}
+
+function varsSnapshot() {
+  return JSON.stringify(varRows.map((r) => [r.name, r.kind, r.text, r.optionsText]));
+}
+
+function updateVarsDirty() {
+  varsDirty = varsSnapshot() !== varsSaved;
+  $('vars-unsaved').hidden = !varsDirty;
+  $('vars-save').disabled = !varsDirty;
+  if (varsDirty) setStatus('vars-status', '');
+}
+
+function usedText(n) {
+  if (!n) return 'Not used yet';
+  return n === 1 ? 'Used in 1 snippet' : `Used in ${n} snippets`;
+}
+
+function varRowEl(row) {
+  const placeholder = el('code');
+  const showPlaceholder = () => { placeholder.textContent = `{{var:${row.name.trim() || 'name'}}}`; };
+  showPlaceholder();
+
+  const name = el('input', { className: 'var-name', value: row.name, placeholder: 'email', autocomplete: 'off', spellcheck: false });
+  name.setAttribute('aria-label', 'Variable name');
+  name.addEventListener('input', () => {
+    row.name = name.value;
+    name.classList.remove('bad');
+    showPlaceholder();
+    renderUndefined();
+    updateVarsDirty();
+  });
+
+  const seg = el('div', { className: 'seg', role: 'radiogroup' });
+  for (const [kind, label] of [['text', 'Text'], ['choices', 'Choices']]) {
+    const b = el('button', { type: 'button', textContent: label });
+    b.dataset.v = kind;
+    b.setAttribute('aria-checked', String(row.kind === kind));
+    b.addEventListener('click', () => {
+      if (row.kind === kind) return;
+      row.kind = kind;
+      renderVars();
+      updateVarsDirty();
+    });
+    seg.append(b);
+  }
+
+  const isText = row.kind === 'text';
+  const value = el('textarea', {
+    className: 'var-value',
+    value: isText ? row.text : row.optionsText,
+    placeholder: isText ? 'sam@example.com' : 'Best\nCheers\nKind regards',
+    spellcheck: false,
+  });
+  value.setAttribute('aria-label', isText ? 'Text to insert' : 'Choices, one per line');
+  value.addEventListener('input', () => {
+    if (row.kind === 'text') row.text = value.value; else row.optionsText = value.value;
+    value.classList.remove('bad');
+    updateVarsDirty();
+  });
+
+  const remove = el('button', { className: 'var-remove', type: 'button', textContent: 'Remove' });
+  remove.addEventListener('click', () => {
+    varRows = varRows.filter((r) => r !== row);
+    renderVars();
+    updateVarsDirty();
+  });
+
+  const hint = isText
+    ? 'Inserted exactly as written. Placeholders inside it are not expanded.'
+    : 'One choice per line. A snippet using it asks you to pick one.';
+  return el('div', { className: 'var-row' },
+    el('div', { className: 'var-top' }, name, seg, el('span', { className: 'var-used', textContent: usedText(row.usedIn) })),
+    value,
+    el('p', { className: 'hint', textContent: hint }),
+    el('div', { className: 'var-foot' }, placeholder, remove));
+}
+
+function renderUndefined() {
+  const box = $('vars-undefined');
+  const defined = new Set(varRows.map((r) => r.name.trim().toLowerCase()));
+  const open = undefinedNames.filter((u) => !defined.has(u.name.toLowerCase()));
+  box.hidden = open.length === 0;
+  box.replaceChildren();
+  if (!open.length) return;
+  box.append(el('span', { textContent: 'Used in snippets but not defined:' }));
+  for (const u of open) {
+    const b = el('button', { type: 'button', textContent: `${u.name} · add` });
+    b.title = `${usedText(u.usedIn)}. Add a variable with this name.`;
+    b.addEventListener('click', () => addVariable(u.name));
+    box.append(b);
+  }
+}
+
+function renderVars() {
+  $('vars-list').replaceChildren(...(varRows.length
+    ? varRows.map(varRowEl)
+    : [el('div', { className: 'empty', textContent: 'No variables yet. Add one, then use it in a snippet as {{var:name}}.' })]));
+  renderUndefined();
+}
+
+function addVariable(name = '') {
+  varRows.push({ name, kind: 'text', text: '', optionsText: '', usedIn: 0 });
+  renderVars();
+  updateVarsDirty();
+  const rows = $('vars-list').querySelectorAll('.var-row');
+  const last = rows[rows.length - 1];
+  if (last) last.querySelector(name ? '.var-value' : '.var-name').focus();
+}
+
+async function loadVariables() {
+  const data = await invoke('list_variables');
+  varRows = data.variables.map(rowFrom);
+  undefinedNames = data.undefined;
+  varsSaved = varsSnapshot();
+  renderVars();
+  updateVarsDirty();
+}
+
+/** Marks the first field with a problem and says what it is. Returns true if there was one. */
+function checkVars() {
+  const rowEls = $('vars-list').querySelectorAll('.var-row');
+  const seen = new Set();
+  const problem = (i, selector, message) => {
+    const field = rowEls[i].querySelector(selector);
+    field.classList.add('bad');
+    field.focus();
+    setStatus('vars-status', message, 'err');
+    return true;
+  };
+  for (let i = 0; i < varRows.length; i++) {
+    const r = varRows[i];
+    const n = r.name.trim();
+    if (!n) return problem(i, '.var-name', 'Give every variable a name.');
+    if (!VAR_NAME.test(n)) return problem(i, '.var-name', `“${n}” isn’t a usable name. Use letters, digits, - and _.`);
+    if (seen.has(n.toLowerCase())) return problem(i, '.var-name', `“${n}” is used twice. Names ignore case.`);
+    seen.add(n.toLowerCase());
+    if (r.kind === 'choices' && !optionsOf(r).length) {
+      return problem(i, '.var-value', `“${n}” needs at least one choice, one per line.`);
+    }
+  }
+  return false;
+}
+
+async function saveVars() {
+  if (!varsDirty || checkVars()) return;
+  const variables = varRows.map((r) => ({ name: r.name.trim(), kind: r.kind, text: r.text, options: optionsOf(r) }));
+  try {
+    await invoke('save_variables', { variables });
+    await loadAll();
+    await loadVariables();
+    setStatus('vars-status', 'Saved.', 'ok');
+  } catch (e) {
+    setStatus('vars-status', String(e), 'err');
+  }
+}
+
+async function openVariables() {
+  if (!confirmDiscard()) return;
+  dirty = false;
+  await loadVariables();
+  setStatus('vars-status', '');
+  showView('variables');
+}
+
+$('nav-variables').addEventListener('click', openVariables);
+$('vars-add').addEventListener('click', () => addVariable());
+$('vars-save').addEventListener('click', saveVars);
 
 // ---------- General settings ----------
 
@@ -370,7 +570,7 @@ $('threshold').addEventListener('change', () => {
   if (n > 0) saveConfig({ clipboard_threshold: n });
 });
 $('open-folder').addEventListener('click', () => invoke('open_snippets_folder'));
-$('nav-settings').addEventListener('click', () => { if (confirmDiscard()) { dirty = false; showView('general'); } });
+$('nav-settings').addEventListener('click', () => { if (confirmDiscard()) { dirty = false; varsDirty = false; showView('general'); } });
 
 // Hotkey recorder
 let recording = false;
@@ -417,6 +617,7 @@ $('paused').addEventListener('change', () => {
 
 document.addEventListener('keydown', (e) => {
   if (e.ctrlKey && e.key.toLowerCase() === 's' && view === 'editor') { e.preventDefault(); save(); }
+  if (e.ctrlKey && e.key.toLowerCase() === 's' && view === 'variables') { e.preventDefault(); saveVars(); }
   if (e.ctrlKey && e.key.toLowerCase() === 'n') { e.preventDefault(); newSnippet(); }
 });
 
@@ -432,6 +633,13 @@ listen('snippets-changed', async () => {
     const s = snippets.find((x) => x.id === current.id);
     if (s) openSnippet(s);
   }
+});
+listen('variables-changed', async () => {
+  // Keeps the warnings banner and the preview honest after variables.toml changes.
+  settings = await invoke('get_settings');
+  renderErrors();
+  if (view === 'variables' && !varsDirty) await loadVariables();
+  if (view === 'editor') updatePreview();
 });
 listen('paused-changed', (e) => {
   $('paused').checked = e.payload;

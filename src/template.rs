@@ -131,8 +131,8 @@ pub fn parse_resolved(body: &str, variables: &Variables) -> Vec<Seg> {
     resolve(&parse(body), variables)
 }
 
-/// The names used as `{{var:name}}` that no variable has, in order of first use.
-pub fn missing(segs: &[Seg]) -> Vec<String> {
+/// Every name used as `{{var:name}}` in unresolved segments, in order of first use.
+pub fn variable_names(segs: &[Seg]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for seg in segs {
         if let Seg::UserVar { name, .. } = seg {
@@ -142,6 +142,11 @@ pub fn missing(segs: &[Seg]) -> Vec<String> {
         }
     }
     out
+}
+
+/// The names that no variable has. Only unresolved names survive `resolve`.
+pub fn missing(resolved: &[Seg]) -> Vec<String> {
+    variable_names(resolved)
 }
 
 pub fn fields(segs: &[Seg]) -> Vec<FieldSpec> {

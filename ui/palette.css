@@ -78,6 +78,7 @@ mark { background: none; color: var(--accent); font-weight: 600; }
 .var { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
 .field { border-bottom: 1.5px dashed var(--accent); color: var(--accent); }
 .field.filled { border-bottom-style: solid; }
+.missing { text-decoration: underline wavy; text-underline-offset: 3px; color: var(--muted); }
 .cur { display: inline-block; width: 2px; height: 1.1em; background: var(--accent); vertical-align: text-bottom; margin: 0 1px; }
 
 /* Form mode */

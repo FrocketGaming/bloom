@@ -61,6 +61,8 @@ fn main() {
             commands::save_snippet,
             commands::delete_snippet,
             commands::open_snippets_folder,
+            commands::list_variables,
+            commands::save_variables,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();

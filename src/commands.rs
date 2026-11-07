@@ -4,8 +4,9 @@ use crate::config::{self, Config};
 use crate::snippets::{self, SnippetEdit};
 use crate::state::AppState;
 use crate::template::{self, FieldSpec, Part};
+use crate::variables::{self, Content, Variable};
 use crate::{engine, hotkey, matcher, palette, platform, tray};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
@@ -163,6 +164,22 @@ pub fn get_settings(state: S) -> SettingsView {
     let store = state.store.read().unwrap();
     let mut errors = store.errors.clone();
     errors.extend(state.variables.read().unwrap().errors.iter().cloned());
+    {
+        let variables = state.variables.read().unwrap();
+        for snippet in &store.snippets {
+            let segs = template::parse_resolved(&snippet.body, &variables);
+            let missing = template::missing(&segs);
+            if !missing.is_empty() {
+                let names: Vec<String> =
+                    missing.iter().map(|n| format!("{{{{var:{n}}}}}")).collect();
+                errors.push(format!(
+                    "“{}” uses {}, which no variable defines. Add it on the Variables page.",
+                    snippet.name,
+                    names.join(", ")
+                ));
+            }
+        }
+    }
     if let Some(e) = state.config_error.read().unwrap().clone() {
         errors.insert(0, e);
     }
@@ -202,6 +219,118 @@ pub fn save_settings(app: AppHandle, state: S, config: Config) -> Result<(), Str
     *state.config.write().unwrap() = config.clone();
     *state.config_error.write().unwrap() = None;
     tray::set_hotkey(&app, &config.hotkey);
+    Ok(())
+}
+
+/// One variable as the Variables page edits it. Both kinds carry both fields,
+/// so switching a row between text and choices does not lose what was typed.
+#[derive(Serialize)]
+pub struct VariableView {
+    name: String,
+    /// "text" or "choices".
+    kind: &'static str,
+    text: String,
+    options: Vec<String>,
+    /// How many snippets use `{{var:name}}`.
+    used_in: usize,
+}
+
+/// A name that snippets use but no variable defines.
+#[derive(Serialize)]
+pub struct UndefinedView {
+    name: String,
+    used_in: usize,
+}
+
+#[derive(Serialize)]
+pub struct VariablesView {
+    variables: Vec<VariableView>,
+    undefined: Vec<UndefinedView>,
+}
+
+#[tauri::command]
+pub fn list_variables(state: S) -> VariablesView {
+    let store = state.store.read().unwrap();
+    let variables = state.variables.read().unwrap();
+
+    // Lower-cased name -> (name as first typed, snippets using it).
+    let mut uses: HashMap<String, (String, usize)> = HashMap::new();
+    for snippet in &store.snippets {
+        for name in template::variable_names(&template::parse(&snippet.body)) {
+            uses.entry(name.to_lowercase()).or_insert((name, 0)).1 += 1;
+        }
+    }
+    let used_in = |name: &str| uses.get(&name.to_lowercase()).map_or(0, |(_, n)| *n);
+
+    let listed = variables
+        .list
+        .iter()
+        .map(|variable| {
+            let (kind, text, options) = match &variable.content {
+                Content::Text(text) => ("text", text.clone(), Vec::new()),
+                Content::Choices(options) => ("choices", String::new(), options.clone()),
+            };
+            VariableView {
+                name: variable.name.clone(),
+                kind,
+                text,
+                options,
+                used_in: used_in(&variable.name),
+            }
+        })
+        .collect();
+
+    let mut undefined: Vec<UndefinedView> = uses
+        .iter()
+        .filter(|(key, _)| variables.get(key).is_none())
+        .map(|(_, (name, count))| UndefinedView {
+            name: name.clone(),
+            used_in: *count,
+        })
+        .collect();
+    undefined.sort_by_key(|u| u.name.to_lowercase());
+
+    VariablesView {
+        variables: listed,
+        undefined,
+    }
+}
+
+/// A variable as sent back from the Variables page.
+#[derive(Deserialize)]
+pub struct VariableEdit {
+    name: String,
+    kind: String,
+    text: String,
+    options: Vec<String>,
+}
+
+fn to_variable(edit: VariableEdit) -> Result<Variable, String> {
+    let name = edit.name.trim().to_string();
+    let content = match edit.kind.as_str() {
+        "text" => Content::Text(edit.text),
+        "choices" => Content::Choices(
+            edit.options
+                .into_iter()
+                .map(|option| option.trim().to_string())
+                .filter(|option| !option.is_empty())
+                .collect(),
+        ),
+        other => return Err(format!("Unknown kind “{other}” for “{name}”.")),
+    };
+    Ok(Variable { name, content })
+}
+
+#[tauri::command]
+pub fn save_variables(state: S, variables: Vec<VariableEdit>) -> Result<(), String> {
+    let list = variables
+        .into_iter()
+        .map(to_variable)
+        .collect::<Result<Vec<_>, _>>()?;
+    variables::save(&state.paths.variables_file, &list).map_err(|e| e.to_string())?;
+    // The folder watcher would pick this up too; reloading now means the next
+    // snippet expansion already sees the change.
+    state.reload_variables();
     Ok(())
 }
 
@@ -275,4 +404,45 @@ pub fn delete_snippet(app: AppHandle, state: S, file: String, index: usize) -> R
 #[tauri::command]
 pub fn open_snippets_folder(state: S) {
     tray::open_folder(&state.paths.snippets_dir);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn edit(name: &str, kind: &str, text: &str, options: &[&str]) -> VariableEdit {
+        VariableEdit {
+            name: name.into(),
+            kind: kind.into(),
+            text: text.into(),
+            options: options.iter().map(|o| o.to_string()).collect(),
+        }
+    }
+
+    #[test]
+    fn a_text_row_keeps_its_text_exactly_and_ignores_its_options() {
+        let variable = to_variable(edit(" email ", "text", " a@b.c \n", &["stale"])).unwrap();
+        assert_eq!(variable.name, "email");
+        assert_eq!(variable.content, Content::Text(" a@b.c \n".into()));
+    }
+
+    #[test]
+    fn a_choices_row_trims_and_drops_blank_options_and_ignores_its_text() {
+        let variable = to_variable(edit(
+            "signoff",
+            "choices",
+            "stale",
+            &[" Best ", "", "  ", "Cheers"],
+        ))
+        .unwrap();
+        assert_eq!(
+            variable.content,
+            Content::Choices(vec!["Best".into(), "Cheers".into()])
+        );
+    }
+
+    #[test]
+    fn an_unknown_kind_is_refused() {
+        assert!(to_variable(edit("x", "number", "", &[])).is_err());
+    }
 }

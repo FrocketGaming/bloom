@@ -50,6 +50,7 @@ function partsHTML(parts, values) {
   return parts.map((p) => {
     switch (p.kind) {
       case 'var': return `<span class="var">${esc(p.text)}</span>`;
+      case 'missing': return `<span class="missing" title="No variable has this name">${esc(p.text)}</span>`;
       case 'cursor': return '<span class="cur" title="Your cursor ends up here"></span>';
       case 'field': {
         const v = values && values[p.text];

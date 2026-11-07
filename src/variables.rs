@@ -8,7 +8,6 @@
 //! folder treats every `.toml` file in it as snippets.
 
 use anyhow::{Result, anyhow, bail};
-use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fs;
 use std::io::ErrorKind;
@@ -16,13 +15,6 @@ use std::path::Path;
 use toml_edit::{Array, DocumentMut, Item, Table, TableLike, Value};
 
 /// What a new `variables.toml` starts with.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "used once snippets and the editor read and write variables"
-    )
-)]
 const STARTER: &str = "# Your variables. Use one in a snippet as {{var:name}}.\n\
 #   name = \"text\"          is inserted exactly as written\n\
 #   name = [\"A\", \"B\"]      is offered as a pick-one choice\n\
@@ -32,8 +24,7 @@ const STARTER: &str = "# Your variables. Use one in a snippet as {{var:name}}.\n
 /// Longest variable name accepted.
 const MAX_NAME: usize = 64;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "value", rename_all = "lowercase")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Content {
     /// Inserted exactly as written. Placeholders inside it are not expanded.
     Text(String),
@@ -41,10 +32,9 @@ pub enum Content {
     Choices(Vec<String>),
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Variable {
     pub name: String,
-    #[serde(flatten)]
     pub content: Content,
 }
 
@@ -175,13 +165,6 @@ fn read_content(name: &str, item: &Item) -> std::result::Result<Content, String>
 }
 
 /// Checks a list of variables before anything is written.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "used once snippets and the editor read and write variables"
-    )
-)]
 fn check(variables: &[Variable]) -> Result<()> {
     let mut seen = HashSet::new();
     for variable in variables {
@@ -209,13 +192,6 @@ fn check(variables: &[Variable]) -> Result<()> {
     Ok(())
 }
 
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "used once snippets and the editor read and write variables"
-    )
-)]
 fn to_value(content: &Content) -> Result<Value> {
     Ok(match content {
         Content::Text(text) => {
@@ -242,13 +218,6 @@ fn to_value(content: &Content) -> Result<Value> {
 /// the list lacks is removed. Entries that Bloom could not read (a hand-written
 /// mistake, say) are left alone, so saving can never delete work that the
 /// editor was not able to show.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "used once snippets and the editor read and write variables"
-    )
-)]
 pub fn save(path: &Path, variables: &[Variable]) -> Result<()> {
     check(variables)?;
     let mut doc: DocumentMut = match fs::read_to_string(path) {
