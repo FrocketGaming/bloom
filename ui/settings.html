@@ -129,6 +129,14 @@
           <p class="hint">Press Backspace right after Bloom expands a snippet to erase it and get the trigger you typed back. Any other key, or a click, means you have moved on, and Backspace works as usual. Snippets that place the cursor inside the text are never undone this way.</p>
         </div>
         <div class="fld">
+          <span>Most used snippets first</span>
+          <div class="seg" id="rank" role="radiogroup">
+            <button type="button" data-v="on">On</button>
+            <button type="button" data-v="off">Off</button>
+          </div>
+          <p class="hint">Bloom keeps a small record of how often and how recently you use each snippet, in <code>usage.toml</code>, and lists your favourites first in suggestions and in search. The record fades over a couple of weeks, so a new favourite takes over quickly. Turning this off stops the recording and goes back to the order in your files. Delete <code>usage.toml</code> to start over.</p>
+        </div>
+        <div class="fld">
           <span>Snippets folder</span>
           <div class="inline"><code id="folder"></code><button id="open-folder" class="btn" type="button">Open folder</button></div>
           <p class="hint">Snippets are plain TOML files. Edit them in any editor and Bloom reloads them when you save.</p>

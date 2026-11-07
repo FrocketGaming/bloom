@@ -16,6 +16,7 @@ mod state;
 mod template;
 mod tray;
 mod undo;
+mod usage;
 mod variables;
 
 use state::AppState;
@@ -32,6 +33,7 @@ fn main() {
     let (config, config_error) = config::load(&paths);
     let store = snippets::Store::load(&paths.snippets_dir);
     let variables = variables::Variables::load(&paths.variables_file);
+    let usage = usage::Usage::load(&paths.usage_file);
     let state = Arc::new(AppState {
         paths,
         config: RwLock::new(config),
@@ -42,6 +44,7 @@ fn main() {
         prev_window: Mutex::new(None),
         pending_form: Mutex::new(None),
         undo: Mutex::new(None),
+        usage: Mutex::new(usage),
     });
 
     tauri::Builder::default()
@@ -88,16 +91,23 @@ fn main() {
                 eprintln!("bloom: not watching snippet files: {e}");
             }
 
-            // variables.toml sits in the settings folder, so watch that folder.
+            // variables.toml sits in the settings folder, so watch that folder,
+            // but only react to that file: usage.toml is rewritten constantly.
             let vars_handle = handle.clone();
             let vars_state = state.clone();
-            if let Err(e) = snippets::watch(&state.paths.root, move || {
-                vars_state.reload_variables();
-                let _ = vars_handle.emit("variables-changed", ());
-            }) {
+            let vars_file = state.paths.variables_file.clone();
+            if let Err(e) = snippets::watch_matching(
+                &state.paths.root,
+                move |changed| changed == vars_file,
+                move || {
+                    vars_state.reload_variables();
+                    let _ = vars_handle.emit("variables-changed", ());
+                },
+            ) {
                 eprintln!("bloom: not watching variables.toml: {e}");
             }
 
+            usage::start_saver(state.clone());
             engine::start(handle.clone(), state.clone());
 
             if first_run {

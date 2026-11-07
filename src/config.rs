@@ -30,6 +30,8 @@ pub struct Config {
     /// Erase an expansion and type its trigger back when Backspace is the very
     /// next key.
     pub undo_with_backspace: bool,
+    /// Remember which snippets are used most and list them first.
+    pub rank_by_use: bool,
 }
 
 impl Default for Config {
@@ -40,6 +42,7 @@ impl Default for Config {
             clipboard_threshold: 80,
             suggestions: true,
             undo_with_backspace: true,
+            rank_by_use: true,
         }
     }
 }
@@ -65,6 +68,10 @@ suggestions = true
 # Press Backspace right after an expansion to erase it and get your trigger
 # back. Any other key, or a click, means you have moved on.
 undo_with_backspace = true
+
+# Keep a record of how often and how recently you use each snippet (in
+# usage.toml) and list the ones you use most first, in suggestions and in search.
+rank_by_use = true
 "#;
 
 const DEFAULT_SNIPPETS: &str = r#"# Your snippets. Bloom reloads this folder as soon as you save a file.
@@ -155,6 +162,8 @@ pub struct Paths {
     /// Beside `bloom.toml`, not in the snippets folder, which reads every
     /// `.toml` file in it as snippets.
     pub variables_file: PathBuf,
+    /// How often each snippet is used. Written by Bloom, not meant for editing.
+    pub usage_file: PathBuf,
 }
 
 impl Paths {
@@ -166,6 +175,7 @@ impl Paths {
             config_file: root.join("bloom.toml"),
             snippets_dir: root.join("snippets"),
             variables_file: root.join("variables.toml"),
+            usage_file: root.join("usage.toml"),
             root,
         }
     }
@@ -222,6 +232,7 @@ pub fn save(paths: &Paths, config: &Config) -> Result<()> {
     doc["clipboard_threshold"] = toml_edit::value(config.clipboard_threshold as i64);
     doc["suggestions"] = toml_edit::value(config.suggestions);
     doc["undo_with_backspace"] = toml_edit::value(config.undo_with_backspace);
+    doc["rank_by_use"] = toml_edit::value(config.rank_by_use);
     crate::files::write_atomic(&paths.config_file, &doc.to_string())?;
     Ok(())
 }
@@ -237,6 +248,7 @@ mod tests {
             config_file: root.join("bloom.toml"),
             snippets_dir: root.join("snippets"),
             variables_file: root.join("variables.toml"),
+            usage_file: root.join("usage.toml"),
             root,
         }
     }
@@ -320,6 +332,45 @@ mod tests {
         assert!(!loaded.undo_with_backspace);
         assert!(loaded.suggestions, "other settings are untouched");
         fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn ranking_is_on_by_default_and_for_older_files() {
+        assert!(Config::default().rank_by_use);
+        let paths = temp_paths("rank-older");
+        fs::write(
+            &paths.config_file,
+            "hotkey = \"Ctrl+Shift+Space\"
+",
+        )
+        .unwrap();
+        let (config, error) = load(&paths);
+        assert!(error.is_none());
+        assert!(config.rank_by_use);
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn turning_ranking_off_is_saved_and_read_back() {
+        let paths = temp_paths("rank-off");
+        let config = Config {
+            rank_by_use: false,
+            ..Config::default()
+        };
+        save(&paths, &config).unwrap();
+        let loaded = load(&paths).0;
+        assert!(!loaded.rank_by_use);
+        assert!(
+            loaded.undo_with_backspace && loaded.suggestions,
+            "other settings are untouched"
+        );
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn the_starter_file_documents_ranking() {
+        let config: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+        assert!(config.rank_by_use);
     }
 
     #[test]

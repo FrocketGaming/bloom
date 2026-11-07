@@ -106,6 +106,18 @@ If Bloom expands something you didn't mean to, press **Backspace** straight away
 - **Some older text boxes** delete accents and emoji one piece at a time. After undoing a snippet that contains those, such a box can leave part of that text behind. Bloom never deletes more than it inserted.
 - **To turn it off,** use **Undo with Backspace** under **Settings**, or set `undo_with_backspace = false` in `bloom.toml`.
 
+## Most used snippets first
+
+Bloom keeps a small record of which snippets you use and puts your favourites first, both in the suggestion list and in search.
+
+- **In suggestions,** the matches you use most are listed first, whatever order they are in your files.
+- **In search,** an empty search box lists your most used snippets at the top. Once you type, how well a snippet matches still decides first; use only breaks ties between equally good matches, so a favourite never outranks a better match.
+- **It fades.** Each use adds one to a snippet's score, and a score halves every 14 days. A snippet you use all the time stays on top, and a new favourite overtakes an old one within days. A single use never beats a steady habit.
+- **What counts as a use:** expanding a trigger, choosing from the suggestion list, or inserting from search. An expansion you undo with Backspace does not count.
+- **A snippet is recognised by its trigger,** or by its file and name if it has none, so editing or reordering your files does not lose the record. Changing a trigger starts that snippet over.
+- **The record is `usage.toml`** in `%APPDATA%\Bloom`. Bloom rewrites it every few seconds; delete it to start over.
+- **To turn it off,** use **Most used snippets first** under **Settings**, or set `rank_by_use = false` in `bloom.toml`. Bloom then stops recording and goes back to the order in your files.
+
 ## Suggestions while you type
 
 Type a trigger's symbol and the next two characters (`;si`) and a small list opens just below your text cursor, showing the snippets that trigger could still become. The highlighted row also shows the start of its text.

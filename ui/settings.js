@@ -565,6 +565,7 @@ function renderGeneral() {
   if (document.activeElement !== $('threshold')) $('threshold').value = c.clipboard_threshold;
   $('suggestions').querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === (c.suggestions ? 'on' : 'off'))));
   $('undo').querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === (c.undo_with_backspace ? 'on' : 'off'))));
+  $('rank').querySelectorAll('button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.v === (c.rank_by_use ? 'on' : 'off'))));
   $('folder').textContent = settings.snippets_dir;
 }
 
@@ -595,6 +596,10 @@ $('suggestions').addEventListener('click', (e) => {
 $('undo').addEventListener('click', (e) => {
   const b = e.target.closest('button[data-v]');
   if (b) saveConfig({ undo_with_backspace: b.dataset.v === 'on' });
+});
+$('rank').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-v]');
+  if (b) saveConfig({ rank_by_use: b.dataset.v === 'on' });
 });
 $('threshold').addEventListener('change', () => {
   const n = parseInt($('threshold').value, 10);
