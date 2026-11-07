@@ -72,6 +72,11 @@ fn key(trigger: Option<&str>, file: &str, name: &str) -> String {
     }
 }
 
+/// Whether the user wants their use recorded and lists ranked by it.
+pub fn enabled(state: &AppState) -> bool {
+    state.config.read().unwrap().rank_by_use
+}
+
 /// What identifies `snippet` in the record.
 pub fn key_of(snippet: &Snippet) -> String {
     key(snippet.trigger.as_deref(), &snippet.file, &snippet.name)
@@ -79,11 +84,17 @@ pub fn key_of(snippet: &Snippet) -> String {
 
 /// Counts one use of `snippet`.
 pub fn record_use(state: &AppState, snippet: &Snippet) {
+    if !enabled(state) {
+        return;
+    }
     state.usage.lock().unwrap().record(&key_of(snippet), now());
 }
 
 /// Takes back a use that the user undid.
 pub fn forget_use(state: &AppState, key: &str) {
+    if !enabled(state) {
+        return;
+    }
     state.usage.lock().unwrap().forget(key, now());
 }
 

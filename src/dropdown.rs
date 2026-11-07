@@ -148,6 +148,9 @@ pub fn open(
 /// Puts the snippets used most (and most recently) first. Snippets with equal
 /// scores, which includes ones never used, keep their order.
 fn rank_by_use(state: &AppState, ids: &mut [String]) {
+    if !usage::enabled(state) {
+        return;
+    }
     let store = state.store.read().unwrap();
     state.usage.lock().unwrap().rank(ids, usage::now(), |id| {
         store.get(id).map(usage::key_of).unwrap_or_default()

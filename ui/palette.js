@@ -19,7 +19,9 @@ function subseq(needle, hay) {
 
 function search(query) {
   const qq = query.toLowerCase().trim();
-  if (!qq) return all.slice();
+  // Nothing typed yet: the snippets used most come first, and the rest keep
+  // their order (the sort is stable).
+  if (!qq) return all.slice().sort((a, b) => b.usage - a.usage);
   const bare = qq.replace(/^[^\p{L}\p{N}]+/u, '');
   const scored = [];
   for (const s of all) {
@@ -36,7 +38,9 @@ function search(query) {
     else if (subseq(bare, `${t} ${n}`)) score = 10;
     if (score >= 0) scored.push({ s, score });
   }
-  return scored.sort((a, b) => b.score - a.score).map((x) => x.s);
+  // How well it matches decides first; use only breaks ties between equally
+  // good matches, so a favourite never outranks a better match.
+  return scored.sort((a, b) => b.score - a.score || b.s.usage - a.s.usage).map((x) => x.s);
 }
 
 function highlight(text, query) {
