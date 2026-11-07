@@ -200,6 +200,7 @@ function showView(v) {
   $('editor').hidden = v !== 'editor';
   $('variables').hidden = v !== 'variables';
   $('general').hidden = v !== 'general';
+  $('nav-snippets').classList.toggle('active', v === 'editor');
   $('nav-variables').classList.toggle('active', v === 'variables');
   $('nav-settings').classList.toggle('active', v === 'general');
   renderTree();
@@ -591,6 +592,21 @@ async function openVariables() {
 }
 
 $('nav-variables').addEventListener('click', openVariables);
+
+/** Back to the snippet editor from Variables or Settings. */
+async function openSnippets() {
+  if (view === 'editor') return;
+  if (!(await confirmDiscard())) return;
+  dirty = false;
+  varsDirty = false;
+  // Reload the snippet from what is saved, so a form left behind by a discarded
+  // edit is not shown as if it were clean.
+  const again = current && snippets.find((s) => s.id === current.id);
+  if (again) openSnippet(again);
+  else if (snippets.length) openSnippet(snippets[0]);
+  else newSnippet();
+}
+$('nav-snippets').addEventListener('click', openSnippets);
 $('vars-add').addEventListener('click', () => addVariable());
 $('vars-save').addEventListener('click', saveVars);
 
