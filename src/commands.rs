@@ -134,12 +134,8 @@ pub fn insert_snippet(
 
 #[tauri::command]
 pub fn hide_palette(app: AppHandle, state: S) {
-    state.pending_form.lock().unwrap().take();
-    let prev = state.prev_window.lock().unwrap().take();
     palette::hide(&app);
-    if let Some(h) = prev {
-        platform::focus_window(h);
-    }
+    engine::close_palette(&state.inner().clone());
 }
 
 #[tauri::command]

@@ -8,6 +8,9 @@ pub struct PendingForm {
     pub id: String,
     /// Characters typed right after the trigger, re-typed after the expansion.
     pub trailing: String,
+    /// Exactly what Bloom deleted when the trigger fired, so cancelling the
+    /// form can put it back where it was.
+    pub restore: String,
 }
 
 pub struct AppState {
