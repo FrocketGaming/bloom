@@ -1,6 +1,6 @@
 //! Where Bloom keeps its files, and the `bloom.toml` settings file.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
@@ -187,7 +187,12 @@ pub fn load(paths: &Paths) -> (Config, Option<String>) {
 /// Writes settings back, keeping the comments already in the file.
 pub fn save(paths: &Paths, config: &Config) -> Result<()> {
     let text = fs::read_to_string(&paths.config_file).unwrap_or_else(|_| DEFAULT_CONFIG.into());
-    let mut doc: toml_edit::DocumentMut = text.parse().unwrap_or_default();
+    // Borrowing the user's file to edit it only works while it parses. Falling
+    // back to an empty document would rewrite it with three keys and no
+    // comments, silently throwing away everything else in there.
+    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e| {
+        anyhow!("bloom.toml has a syntax error, so Bloom won't overwrite it. Fix the file, then save again: {e}")
+    })?;
     doc["hotkey"] = toml_edit::value(config.hotkey.clone());
     doc["inject"] = toml_edit::value(match config.inject {
         InjectMode::Auto => "auto",
@@ -195,6 +200,46 @@ pub fn save(paths: &Paths, config: &Config) -> Result<()> {
         InjectMode::Clipboard => "clipboard",
     });
     doc["clipboard_threshold"] = toml_edit::value(config.clipboard_threshold as i64);
-    fs::write(&paths.config_file, doc.to_string())?;
+    crate::files::write_atomic(&paths.config_file, &doc.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_paths(tag: &str) -> Paths {
+        let root = std::env::temp_dir().join(format!("bloom-config-{tag}-{}", std::process::id()));
+        fs::create_dir_all(&root).unwrap();
+        Paths {
+            config_file: root.join("bloom.toml"),
+            snippets_dir: root.join("snippets"),
+            root,
+        }
+    }
+
+    #[test]
+    fn a_broken_file_is_never_overwritten() {
+        let paths = temp_paths("broken");
+        let broken = "hotkey = \"Ctrl+Shift+Space\"\nthis line is not toml\n";
+        fs::write(&paths.config_file, broken).unwrap();
+        assert!(save(&paths, &Config::default()).is_err());
+        assert_eq!(fs::read_to_string(&paths.config_file).unwrap(), broken);
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn saving_keeps_comments() {
+        let paths = temp_paths("comments");
+        fs::write(
+            &paths.config_file,
+            "# keep me\nhotkey = \"Ctrl+Shift+Space\"\n",
+        )
+        .unwrap();
+        save(&paths, &Config::default()).unwrap();
+        let text = fs::read_to_string(&paths.config_file).unwrap();
+        assert!(text.contains("# keep me"));
+        assert!(text.contains("clipboard_threshold"));
+        fs::remove_dir_all(&paths.root).ok();
+    }
 }

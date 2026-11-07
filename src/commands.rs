@@ -4,7 +4,7 @@ use crate::config::{self, Config};
 use crate::snippets::{self, SnippetEdit};
 use crate::state::AppState;
 use crate::template::{self, FieldSpec, Part};
-use crate::{engine, hotkey, palette, platform, tray};
+use crate::{engine, hotkey, matcher, palette, platform, tray};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -32,23 +32,33 @@ pub struct SnippetView {
 #[tauri::command]
 pub fn list_snippets(state: S) -> Vec<SnippetView> {
     let store = state.store.read().unwrap();
+    // Every body is parsed once, and the clipboard is read at most once rather
+    // than once per snippet that uses {{clipboard}}.
+    let parsed: Vec<Vec<template::Seg>> = store
+        .snippets
+        .iter()
+        .map(|s| template::parse(&s.body))
+        .collect();
+    let clipboard = parsed
+        .iter()
+        .any(|segs| template::uses_clipboard(segs))
+        .then(template::read_clipboard)
+        .flatten();
     store
         .snippets
         .iter()
-        .map(|s| {
-            let segs = template::parse(&s.body);
-            SnippetView {
-                id: s.id.clone(),
-                file: s.file.clone(),
-                index: s.index,
-                group: s.group.clone(),
-                trigger: s.trigger.clone(),
-                name: s.name.clone(),
-                body: s.body.clone(),
-                word: s.word,
-                preview: template::preview(&segs),
-                fields: template::fields(&segs),
-            }
+        .zip(parsed)
+        .map(|(s, segs)| SnippetView {
+            id: s.id.clone(),
+            file: s.file.clone(),
+            index: s.index,
+            group: s.group.clone(),
+            trigger: s.trigger.clone(),
+            name: s.name.clone(),
+            body: s.body.clone(),
+            word: s.word,
+            preview: template::preview(&segs, clipboard.as_deref()),
+            fields: template::fields(&segs),
         })
         .collect()
 }
@@ -62,8 +72,11 @@ pub struct BodyPreview {
 #[tauri::command]
 pub fn preview_body(body: String) -> BodyPreview {
     let segs = template::parse(&body);
+    let clipboard = template::uses_clipboard(&segs)
+        .then(template::read_clipboard)
+        .flatten();
     BodyPreview {
-        preview: template::preview(&segs),
+        preview: template::preview(&segs, clipboard.as_deref()),
         fields: template::fields(&segs),
     }
 }
@@ -162,12 +175,22 @@ pub fn get_settings(state: S) -> SettingsView {
 #[tauri::command]
 pub fn save_settings(app: AppHandle, state: S, config: Config) -> Result<(), String> {
     let old = state.config.read().unwrap().clone();
-    if config.hotkey != old.hotkey {
+    let new_hotkey = config.hotkey != old.hotkey;
+    if new_hotkey {
         hotkey::register(&app, &config.hotkey, Some(&old.hotkey))?;
     }
-    config::save(&state.paths, &config).map_err(|e| e.to_string())?;
-    *state.config.write().unwrap() = config;
+    // Write before adopting: if the file can't be written (a syntax error in
+    // bloom.toml, a read-only folder), the running app must not behave like the
+    // new settings were saved.
+    if let Err(e) = config::save(&state.paths, &config) {
+        if new_hotkey {
+            let _ = hotkey::register(&app, &old.hotkey, None);
+        }
+        return Err(e.to_string());
+    }
+    *state.config.write().unwrap() = config.clone();
     *state.config_error.write().unwrap() = None;
+    tray::set_hotkey(&app, &config.hotkey);
     Ok(())
 }
 
@@ -192,6 +215,15 @@ pub fn save_snippet(app: AppHandle, state: S, edit: SnippetEdit) -> Result<Strin
         return Err(
             "Use at least two characters for a trigger, or it will fire constantly.".into(),
         );
+    }
+    if trigger.chars().count() > matcher::MAX_TRIGGER {
+        return Err(format!(
+            "Triggers can be at most {} characters.",
+            matcher::MAX_TRIGGER
+        ));
+    }
+    if trigger.contains(['\r', '\n', '\t']) {
+        return Err("Triggers can't contain line breaks or tabs.".into());
     }
     if !trigger.is_empty() {
         let editing = edit

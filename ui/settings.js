@@ -64,7 +64,7 @@ async function loadAll() {
 function renderErrors() {
   const errs = settings.errors || [];
   $('errors').hidden = errs.length === 0;
-  $('errors').textContent = errs.length ? `Some files couldn't be read:\n${errs.join('\n')}` : '';
+  $('errors').textContent = errs.length ? `Some things need attention:\n${errs.join('\n')}` : '';
 }
 
 // ---------- Sidebar ----------

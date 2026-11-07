@@ -4,6 +4,7 @@
 mod commands;
 mod config;
 mod engine;
+mod files;
 mod hotkey;
 mod matcher;
 mod palette;

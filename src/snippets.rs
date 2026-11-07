@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
@@ -61,14 +62,19 @@ pub struct Store {
 impl Store {
     pub fn load(dir: &Path) -> Store {
         let mut store = Store::default();
-        let mut paths: Vec<_> = fs::read_dir(dir)
-            .map(|rd| {
-                rd.flatten()
+        let mut paths = Vec::new();
+        match fs::read_dir(dir) {
+            Ok(entries) => paths.extend(
+                entries
+                    .flatten()
                     .map(|e| e.path())
-                    .filter(|p| p.extension().is_some_and(|x| x == "toml"))
-                    .collect()
-            })
-            .unwrap_or_default();
+                    .filter(|p| p.extension().is_some_and(|x| x == "toml")),
+            ),
+            // A missing or unreadable folder used to look like "no snippets".
+            Err(e) => store
+                .errors
+                .push(format!("couldn't read the snippets folder: {e}")),
+        }
         paths.sort();
 
         for path in paths {
@@ -86,7 +92,12 @@ impl Store {
             };
             let group = group_name(&path);
             for (index, raw) in parsed.snippet.into_iter().enumerate() {
-                let trigger = raw.trigger.filter(|t| !t.trim().is_empty());
+                // Trimmed the same way the editor saves them, so a hand-written
+                // trigger and a saved one are compared identically.
+                let trigger = raw
+                    .trigger
+                    .map(|t| t.trim().to_string())
+                    .filter(|t| !t.is_empty());
                 let name = raw
                     .name
                     .filter(|n| !n.trim().is_empty())
@@ -118,6 +129,20 @@ impl Store {
                 })
                 .collect(),
         );
+        // Hand-edited files can repeat a trigger. The matcher keeps the last
+        // match, so say so instead of letting a snippet quietly never fire.
+        let mut seen = HashSet::new();
+        let mut duplicates = Vec::new();
+        for snippet in &store.snippets {
+            if let Some(text) = snippet.trigger.as_deref() {
+                if !seen.insert(text.to_owned()) {
+                    duplicates.push(format!(
+                        "“{text}” is the trigger for more than one snippet; only the last one expands."
+                    ));
+                }
+            }
+        }
+        store.errors.extend(duplicates);
         store
     }
 
@@ -166,18 +191,41 @@ pub struct SnippetEdit {
     pub word: bool,
 }
 
+/// Windows device names are reserved whatever the extension, so `CON.toml`
+/// would mean the console rather than a file in the snippets folder.
+const RESERVED_NAMES: [&str; 22] = [
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
+/// Turns what the user typed into a file name inside the snippets folder, or
+/// explains why it can't be one.
 fn safe_file_name(file: &str) -> Result<String> {
     let mut f = file.trim().to_string();
     if f.is_empty() {
         bail!("Choose a file for the snippet.");
     }
-    if !f.ends_with(".toml") {
+    if !f.to_ascii_lowercase().ends_with(".toml") {
         f.push_str(".toml");
     }
-    if f.contains(['/', '\\', ':']) || f.starts_with('.') {
-        bail!("File names can't contain / \\ or :");
+    // Windows drops trailing dots and spaces, so the file on disk would end up
+    // with a different name than the one Bloom hands back.
+    let stem = f[..f.len() - 5].trim_end_matches(['.', ' ']);
+    if stem.is_empty() {
+        bail!("Choose a file for the snippet.");
     }
-    Ok(f)
+    if stem.starts_with('.') {
+        bail!("File names can't start with a dot.");
+    }
+    if stem.chars().any(|c| {
+        c.is_control() || matches!(c, '<' | '>' | ':' | '"' | '/' | '\\' | '|' | '?' | '*')
+    }) {
+        bail!("File names can't contain < > : \" / \\ | ? * or control characters.");
+    }
+    if RESERVED_NAMES.iter().any(|r| stem.eq_ignore_ascii_case(r)) {
+        bail!("“{stem}” is a name Windows reserves for a device. Pick another one.");
+    }
+    Ok(format!("{stem}.toml"))
 }
 
 fn load_doc(path: &Path) -> Result<DocumentMut> {
@@ -222,7 +270,7 @@ pub fn save(dir: &Path, edit: SnippetEdit) -> Result<String> {
     } else {
         tbl["word"] = toml_edit::value(false);
     }
-    fs::write(&path, doc.to_string())?;
+    crate::files::write_atomic(&path, &doc.to_string())?;
     Ok(format!("{file}#{index}"))
 }
 
@@ -237,7 +285,7 @@ pub fn delete(dir: &Path, file: &str, index: usize) -> Result<()> {
         bail!("That snippet no longer exists in {file}.");
     }
     arr.remove(index);
-    fs::write(&path, doc.to_string())?;
+    crate::files::write_atomic(&path, &doc.to_string())?;
     Ok(())
 }
 
@@ -353,6 +401,42 @@ mod tests {
         assert!(!store.snippets[1].word);
         delete(&dir, "a.toml", 0).unwrap();
         assert_eq!(Store::load(&dir).snippets[0].trigger.as_deref(), Some(";y"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn file_names_are_validated() {
+        assert_eq!(safe_file_name(" work ").unwrap(), "work.toml");
+        assert_eq!(safe_file_name("Work.TOML").unwrap(), "Work.toml");
+        assert_eq!(safe_file_name("work.").unwrap(), "work.toml");
+        assert!(safe_file_name("a/b").is_err());
+        assert!(safe_file_name("nul").is_err());
+        assert!(safe_file_name("What?").is_err());
+        assert!(safe_file_name("   ").is_err());
+        assert!(safe_file_name(".hidden").is_err());
+    }
+
+    #[test]
+    fn duplicate_triggers_are_reported() {
+        let dir = std::env::temp_dir().join(format!("bloom-dupes-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("a.toml"),
+            "[[snippet]]\ntrigger = \";x\"\nbody = \"1\"\n",
+        )
+        .unwrap();
+        fs::write(
+            dir.join("b.toml"),
+            "[[snippet]]\ntrigger = \";x\"\nbody = \"2\"\n",
+        )
+        .unwrap();
+        let store = Store::load(&dir);
+        assert_eq!(store.snippets.len(), 2);
+        assert!(
+            store.errors.iter().any(|e| e.contains(";x")),
+            "a repeated trigger is worth warning about: {:?}",
+            store.errors
+        );
         fs::remove_dir_all(&dir).ok();
     }
 }

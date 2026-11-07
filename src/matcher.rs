@@ -37,6 +37,11 @@ pub struct Matcher {
 
 const MAX_BUF: usize = 96;
 
+/// Longest trigger worth accepting. The buffer above only remembers this much
+/// text, so a longer trigger could never match; the editor says so instead of
+/// saving a snippet that silently never fires.
+pub const MAX_TRIGGER: usize = 64;
+
 impl Matcher {
     pub fn reset(&mut self) {
         self.buf.clear();
