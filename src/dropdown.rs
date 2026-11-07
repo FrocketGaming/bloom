@@ -155,8 +155,10 @@ pub fn select(app: &AppHandle, state: &AppState, menu: &mut Menu, step: isize) {
 /// Hides the dropdown and gives the arrow, Enter, Tab and Esc keys back.
 pub fn close(app: &AppHandle) {
     platform::set_list_keys(false);
-    if let Some(w) = window(app) {
-        let _ = w.hide();
+    if let Some(w) = window(app)
+        && let Ok(hwnd) = w.hwnd()
+    {
+        platform::hide_window(hwnd.0 as isize);
     }
 }
 

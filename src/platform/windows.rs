@@ -630,6 +630,14 @@ pub fn place_without_activating(hwnd: isize, x: i32, y: i32, width: i32, height:
     }
 }
 
+/// Hides a window shown with `place_without_activating`. Asking the window
+/// toolkit to hide it does nothing, because it never learned the window was shown.
+pub fn hide_window(hwnd: isize) {
+    unsafe {
+        ShowWindow(hwnd as HWND, SW_HIDE);
+    }
+}
+
 /// Windows 11 rounded corners for a borderless window.
 pub fn round_corners(hwnd: isize) {
     let pref = DWMWCP_ROUND;
