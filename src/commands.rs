@@ -177,12 +177,22 @@ pub fn resize_palette(app: AppHandle, height: f64) {
     palette::resize(&app, height);
 }
 
+/// A snippet file, with the name its group goes by and how many snippets it
+/// holds, so a file with none can still be listed.
+#[derive(Serialize)]
+pub struct FileView {
+    file: String,
+    group: String,
+    snippets: usize,
+}
+
 #[derive(Serialize)]
 pub struct SettingsView {
     config: Config,
     paused: bool,
     snippets_dir: String,
     files: Vec<String>,
+    snippet_files: Vec<FileView>,
     errors: Vec<String>,
 }
 
@@ -223,6 +233,15 @@ pub fn get_settings(state: S) -> SettingsView {
         paused: state.paused.load(Ordering::Relaxed),
         snippets_dir: state.paths.snippets_dir.display().to_string(),
         files: store.files.clone(),
+        snippet_files: store
+            .files
+            .iter()
+            .map(|file| FileView {
+                file: file.clone(),
+                group: snippets::group_name(std::path::Path::new(file)),
+                snippets: store.snippets.iter().filter(|s| &s.file == file).count(),
+            })
+            .collect(),
         errors,
     }
 }
@@ -424,6 +443,17 @@ fn ensure_toml(f: &str) -> String {
 #[tauri::command]
 pub fn delete_snippet(app: AppHandle, state: S, file: String, index: usize) -> Result<(), String> {
     snippets::delete(&state.paths.snippets_dir, &file, index).map_err(|e| e.to_string())?;
+    after_change(&app, &state);
+    Ok(())
+}
+
+/// Moves a whole snippet file to the Recycle Bin. Nothing is deleted for good:
+/// the file can be restored from the bin, and Bloom picks it up again.
+#[tauri::command]
+pub fn delete_snippet_file(app: AppHandle, state: S, file: String) -> Result<(), String> {
+    let path =
+        snippets::existing_file(&state.paths.snippets_dir, &file).map_err(|e| e.to_string())?;
+    platform::move_to_recycle_bin(&path)?;
     after_change(&app, &state);
     Ok(())
 }

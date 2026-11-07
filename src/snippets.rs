@@ -151,7 +151,7 @@ impl Store {
     }
 }
 
-fn group_name(path: &Path) -> String {
+pub fn group_name(path: &Path) -> String {
     let stem = path.file_stem().unwrap_or_default().to_string_lossy();
     let words: Vec<String> = stem
         .split(['-', '_', ' '])
@@ -272,6 +272,18 @@ pub fn save(dir: &Path, edit: SnippetEdit) -> Result<String> {
     }
     crate::files::write_atomic(&path, &doc.to_string())?;
     Ok(format!("{file}#{index}"))
+}
+
+/// The path of a snippet file in the snippets folder, for a name that came from
+/// the user interface. The name is checked like any other, so it cannot point
+/// outside the folder, and the file has to exist.
+pub fn existing_file(dir: &Path, file: &str) -> Result<std::path::PathBuf> {
+    let name = safe_file_name(file)?;
+    let path = dir.join(&name);
+    if !path.is_file() {
+        bail!("{name} no longer exists. It may have been removed outside Bloom.");
+    }
+    Ok(path)
 }
 
 pub fn delete(dir: &Path, file: &str, index: usize) -> Result<()> {
@@ -412,6 +424,33 @@ mod tests {
         assert!(!store.snippets[1].word);
         delete(&dir, "a.toml", 0).unwrap();
         assert_eq!(Store::load(&dir).snippets[0].trigger.as_deref(), Some(";y"));
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn only_an_existing_file_inside_the_folder_can_be_picked() {
+        let dir = std::env::temp_dir().join(format!("bloom-existing-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("work.toml"), "").unwrap();
+        assert_eq!(
+            existing_file(&dir, "work.toml").unwrap(),
+            dir.join("work.toml")
+        );
+        // The extension is optional, as it is when saving a snippet.
+        assert_eq!(existing_file(&dir, "work").unwrap(), dir.join("work.toml"));
+        assert!(existing_file(&dir, "gone.toml").is_err(), "must exist");
+        for sneaky in [
+            "..\\work.toml",
+            "../work.toml",
+            "sub/work.toml",
+            "C:\\Windows\\win.ini",
+            "",
+        ] {
+            assert!(existing_file(&dir, sneaky).is_err(), "{sneaky}");
+        }
+        // A folder with a .toml name is not a snippet file.
+        fs::create_dir_all(dir.join("folder.toml")).unwrap();
+        assert!(existing_file(&dir, "folder.toml").is_err());
         fs::remove_dir_all(&dir).ok();
     }
 
