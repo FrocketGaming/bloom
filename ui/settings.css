@@ -21,7 +21,7 @@
   --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #1c191b; --side: #161415; --ink: #f2edf0; --muted: #a49aa0; --line: #322c30; --field: #242023;
     --hover: rgba(240, 101, 149, .08); --sel: rgba(240, 101, 149, .16); --chip: rgba(255, 255, 255, .07);
     --accent: #f06595; --accent-ink: #1a0b11; --accent-soft: rgba(240, 101, 149, .15);
@@ -29,6 +29,16 @@
     color-scheme: dark;
   }
 }
+/* The same dark colours when dark is chosen in Settings, whatever Windows uses.
+   Keep this block in step with the one above. */
+:root[data-theme="dark"] {
+  --bg: #1c191b; --side: #161415; --ink: #f2edf0; --muted: #a49aa0; --line: #322c30; --field: #242023;
+  --hover: rgba(240, 101, 149, .08); --sel: rgba(240, 101, 149, .16); --chip: rgba(255, 255, 255, .07);
+  --accent: #f06595; --accent-ink: #1a0b11; --accent-soft: rgba(240, 101, 149, .15);
+  --danger: #ff8a80; --ok: #6fcf97; --ok-ink: #0d2818; --warn-bg: #3a2a12; --warn-ink: #ffd8a8;
+  color-scheme: dark;
+}
+:root[data-theme="light"] { color-scheme: light; }
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
