@@ -16,6 +16,7 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
     let (tx, rx) = mpsc::channel();
     platform::start_listener(tx);
     platform::start_password_watch();
+    platform::start_caret_probe();
 
     thread::Builder::new()
         .name("bloom-engine".into())
