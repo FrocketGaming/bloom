@@ -18,11 +18,12 @@
     </div>
     <nav id="tree" class="tree" aria-label="Snippets"></nav>
     <div class="side-foot">
-      <label class="toggle"><input type="checkbox" id="paused"><span class="track"></span><span id="paused-label">Expanding</span></label>
-      <div class="foot-links">
+      <nav class="foot-links" aria-label="Sections">
+        <button id="nav-snippets" class="link" type="button">Snippets</button>
         <button id="nav-variables" class="link" type="button">Variables</button>
         <button id="nav-settings" class="link" type="button">Settings</button>
-      </div>
+      </nav>
+      <label class="toggle"><input type="checkbox" id="paused"><span class="track"></span><span id="paused-label">Expanding</span></label>
     </div>
   </aside>
 
@@ -146,6 +147,19 @@
     </section>
   </main>
 </div>
+
+<!-- Asks before something is lost. The browser's own confirm box would title
+     itself with the app's internal address, so Bloom draws its own. -->
+<dialog id="confirm" class="dlg" aria-labelledby="confirm-title" aria-describedby="confirm-message">
+  <form method="dialog">
+    <h2 id="confirm-title"></h2>
+    <p id="confirm-message"></p>
+    <div class="dlg-actions">
+      <button id="confirm-cancel" class="btn" type="submit" value="cancel" autofocus></button>
+      <button id="confirm-ok" class="btn" type="submit" value="ok"></button>
+    </div>
+  </form>
+</dialog>
 <script src="settings.js"></script>
 </body>
 </html>

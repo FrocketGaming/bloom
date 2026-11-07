@@ -134,21 +134,65 @@ function renderTree() {
   $('tree').innerHTML = html;
 }
 
-$('tree').addEventListener('click', (e) => {
+$('tree').addEventListener('click', async (e) => {
   const header = e.target.closest('.group');
   if (header) { toggleGroup(header.dataset.group); return; }
   const item = e.target.closest('.item');
   if (!item) return;
   const s = snippets.find((x) => x.id === item.dataset.id);
-  if (s && confirmDiscard()) openSnippet(s);
+  if (s && await confirmDiscard()) openSnippet(s);
 });
 $('filter').addEventListener('input', renderTree);
 
-function confirmDiscard() {
+/**
+ * Asks a yes or no question in a dialog of Bloom's own. The browser's confirm
+ * box titles itself with the app's internal address ("tauri.localhost says").
+ * Resolves true only if the user confirms: Esc, Cancel or a click outside is no.
+ * Focus starts on the cancel button, so a stray Enter never destroys anything.
+ */
+function askConfirm({ title, message, confirm, cancel = 'Cancel', danger = false }) {
+  const dialog = $('confirm');
+  const ok = $('confirm-ok');
+  $('confirm-title').textContent = title;
+  $('confirm-message').textContent = message;
+  $('confirm-cancel').textContent = cancel;
+  ok.textContent = confirm;
+  ok.classList.toggle('danger', danger);
+  ok.classList.toggle('primary', !danger);
+  dialog.returnValue = '';
+  return new Promise((resolve) => {
+    const onClose = () => {
+      dialog.removeEventListener('close', onClose);
+      dialog.removeEventListener('click', onBackdrop);
+      resolve(dialog.returnValue === 'ok');
+    };
+    // A click on the dimmed area around the dialog lands on the dialog itself.
+    const onBackdrop = (e) => { if (e.target === dialog) dialog.close('cancel'); };
+    dialog.addEventListener('close', onClose);
+    dialog.addEventListener('click', onBackdrop);
+    dialog.showModal();
+  });
+}
+
+async function confirmDiscard() {
   if (view === 'variables') {
-    return !varsDirty || window.confirm('You have unsaved changes to your variables. Discard them?');
+    if (!varsDirty) return true;
+    return askConfirm({
+      title: 'Discard your changes?',
+      message: 'You have unsaved changes to your variables.',
+      confirm: 'Discard',
+      cancel: 'Keep editing',
+      danger: true,
+    });
   }
-  return !dirty || window.confirm('You have unsaved changes to this snippet. Discard them?');
+  if (!dirty) return true;
+  return askConfirm({
+    title: 'Discard your changes?',
+    message: 'You have unsaved changes to this snippet.',
+    confirm: 'Discard',
+    cancel: 'Keep editing',
+    danger: true,
+  });
 }
 
 function showView(v) {
@@ -156,6 +200,7 @@ function showView(v) {
   $('editor').hidden = v !== 'editor';
   $('variables').hidden = v !== 'variables';
   $('general').hidden = v !== 'general';
+  $('nav-snippets').classList.toggle('active', v === 'editor');
   $('nav-variables').classList.toggle('active', v === 'variables');
   $('nav-settings').classList.toggle('active', v === 'general');
   renderTree();
@@ -188,8 +233,8 @@ function openSnippet(s) {
   updatePreview();
 }
 
-function newSnippet() {
-  if (!confirmDiscard()) return;
+async function newSnippet() {
+  if (!(await confirmDiscard())) return;
   current = null;
   $('ed-title').textContent = 'New snippet';
   $('ed-name').value = '';
@@ -263,7 +308,13 @@ async function save() {
 
 async function remove() {
   if (!current) return;
-  if (!window.confirm(`Delete “${$('ed-title').textContent}”? This removes it from ${current.file}.`)) return;
+  const confirmed = await askConfirm({
+    title: 'Delete this snippet?',
+    message: `“${$('ed-title').textContent}” will be removed from ${current.file}.`,
+    confirm: 'Delete',
+    danger: true,
+  });
+  if (!confirmed) return;
   try {
     await invoke('delete_snippet', { file: current.file, index: current.index });
     dirty = false;
@@ -533,7 +584,7 @@ async function saveVars() {
 }
 
 async function openVariables() {
-  if (!confirmDiscard()) return;
+  if (!(await confirmDiscard())) return;
   dirty = false;
   await loadVariables();
   setStatus('vars-status', '');
@@ -541,6 +592,21 @@ async function openVariables() {
 }
 
 $('nav-variables').addEventListener('click', openVariables);
+
+/** Back to the snippet editor from Variables or Settings. */
+async function openSnippets() {
+  if (view === 'editor') return;
+  if (!(await confirmDiscard())) return;
+  dirty = false;
+  varsDirty = false;
+  // Reload the snippet from what is saved, so a form left behind by a discarded
+  // edit is not shown as if it were clean.
+  const again = current && snippets.find((s) => s.id === current.id);
+  if (again) openSnippet(again);
+  else if (snippets.length) openSnippet(snippets[0]);
+  else newSnippet();
+}
+$('nav-snippets').addEventListener('click', openSnippets);
 $('vars-add').addEventListener('click', () => addVariable());
 $('vars-save').addEventListener('click', saveVars);
 
@@ -606,7 +672,7 @@ $('threshold').addEventListener('change', () => {
   if (n > 0) saveConfig({ clipboard_threshold: n });
 });
 $('open-folder').addEventListener('click', () => invoke('open_snippets_folder'));
-$('nav-settings').addEventListener('click', () => { if (confirmDiscard()) { dirty = false; varsDirty = false; showView('general'); } });
+$('nav-settings').addEventListener('click', async () => { if (await confirmDiscard()) { dirty = false; varsDirty = false; showView('general'); } });
 
 // Hotkey recorder
 let recording = false;
