@@ -1,9 +1,10 @@
 //! Commands the palette and settings windows call from JavaScript.
 
-use crate::config::{self, Config};
+use crate::config::{self, Config, ThemeMode};
 use crate::snippets::{self, SnippetEdit};
 use crate::state::AppState;
 use crate::template::{self, FieldSpec, Part};
+use crate::theme::{self, Palette, Preset, Theme};
 use crate::variables::{self, Content, Variable};
 use crate::{engine, hotkey, matcher, palette, platform, startup, tray, usage};
 use serde::{Deserialize, Serialize};
@@ -248,6 +249,7 @@ pub fn get_settings(state: S) -> SettingsView {
 
 #[tauri::command]
 pub fn save_settings(app: AppHandle, state: S, config: Config) -> Result<(), String> {
+    theme::validate(&config.accent, &config.accent_color)?;
     let old = state.config.read().unwrap().clone();
     let new_hotkey = config.hotkey != old.hotkey;
     if new_hotkey {
@@ -277,7 +279,60 @@ pub fn save_settings(app: AppHandle, state: S, config: Config) -> Result<(), Str
     *state.config.write().unwrap() = config.clone();
     *state.config_error.write().unwrap() = None;
     tray::set_hotkey(&app, &config.hotkey);
+    let look_changed = config.theme != old.theme
+        || config.accent != old.accent
+        || config.accent_color != old.accent_color;
+    if look_changed {
+        set_window_theme(&app, config.theme);
+        // Every open window redraws itself in the new look.
+        let _ = app.emit("theme-changed", ());
+    }
     Ok(())
+}
+
+/// What a window needs to draw itself in the chosen look, and what the Settings
+/// page needs to show the choices.
+#[derive(Serialize)]
+pub struct ThemeView {
+    #[serde(flatten)]
+    theme: Theme,
+    presets: Vec<Preset>,
+    accent: String,
+    accent_color: String,
+}
+
+#[tauri::command]
+pub fn get_theme(state: S) -> ThemeView {
+    let config = state.config.read().unwrap();
+    ThemeView {
+        theme: theme::resolve(config.theme, &config.accent, &config.accent_color),
+        presets: theme::presets(),
+        accent: config.accent.clone(),
+        accent_color: config.accent_color.clone(),
+    }
+}
+
+/// How a custom accent will really look, once adjusted so text stays readable.
+#[derive(Serialize)]
+pub struct AccentPreview {
+    light: Palette,
+    dark: Palette,
+}
+
+#[tauri::command]
+pub fn preview_accent(color: String) -> Result<AccentPreview, String> {
+    let (light, dark) = theme::preview(&color)?;
+    Ok(AccentPreview { light, dark })
+}
+
+/// Makes the windows' own theme (the title bar, the frosted backdrop of the
+/// search window) match the chosen mode, or Windows' when it is "system".
+pub fn set_window_theme(app: &AppHandle, mode: ThemeMode) {
+    app.set_theme(match mode {
+        ThemeMode::System => None,
+        ThemeMode::Light => Some(tauri::Theme::Light),
+        ThemeMode::Dark => Some(tauri::Theme::Dark),
+    });
 }
 
 /// One variable as the Variables page edits it. Both kinds carry both fields,
