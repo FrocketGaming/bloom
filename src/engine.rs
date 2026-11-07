@@ -154,8 +154,16 @@ fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit, restore: Option<Stri
     deliver(state, &rendered.text, &hit.trailing, rendered.cursor_back);
 }
 
+/// How far left of the end of the inserted text the cursor goes. A body with a
+/// `{{cursor}}` marker puts it there, which is also before whatever the user
+/// typed after the trigger. A body without one leaves it at the very end, after
+/// that character, where the user expects to carry on typing.
+fn cursor_steps(cursor_back: Option<usize>, trailing: &str) -> usize {
+    cursor_back.map_or(0, |back| back + trailing.chars().count())
+}
+
 /// Inserts text into the focused app, then places the cursor.
-pub fn deliver(state: &AppState, text: &str, trailing: &str, cursor_back: usize) {
+pub fn deliver(state: &AppState, text: &str, trailing: &str, cursor_back: Option<usize>) {
     let full = format!("{text}{trailing}");
     if full.is_empty() {
         return;
@@ -181,7 +189,7 @@ pub fn deliver(state: &AppState, text: &str, trailing: &str, cursor_back: usize)
     } else {
         platform::type_text(&full);
     }
-    platform::cursor_left(cursor_back + trailing.chars().count());
+    platform::cursor_left(cursor_steps(cursor_back, trailing));
 }
 
 /// Closes the palette and gives focus back to the window it covered (Esc, or
@@ -212,4 +220,26 @@ pub fn close_palette(state: &Arc<AppState>) {
 pub fn dismiss_palette(state: &AppState) {
     state.pending_form.lock().unwrap().take();
     state.prev_window.lock().unwrap().take();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn without_a_cursor_marker_the_cursor_stays_at_the_end() {
+        assert_eq!(cursor_steps(None, ""), 0);
+        // The character typed after the trigger was re-typed after the text;
+        // the cursor must not move back over it.
+        assert_eq!(cursor_steps(None, "!"), 0);
+    }
+
+    #[test]
+    fn a_cursor_marker_counts_the_text_after_it_and_the_trailing_character() {
+        assert_eq!(cursor_steps(Some(3), ""), 3);
+        assert_eq!(cursor_steps(Some(3), "!"), 4);
+        // A marker at the very end still sits before the trailing character.
+        assert_eq!(cursor_steps(Some(0), "!"), 1);
+        assert_eq!(cursor_steps(Some(0), ""), 0);
+    }
 }

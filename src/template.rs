@@ -46,8 +46,9 @@ pub struct Part {
 
 pub struct Rendered {
     pub text: String,
-    /// How many characters come after the `{{cursor}}` marker.
-    pub cursor_back: usize,
+    /// How many characters come after the `{{cursor}}` marker, or `None` when
+    /// the body has no marker and the cursor simply stays at the end.
+    pub cursor_back: Option<usize>,
 }
 
 pub fn parse(body: &str) -> Vec<Seg> {
@@ -221,7 +222,7 @@ pub fn render(segs: &[Seg], values: &HashMap<String, String>) -> Rendered {
     }
     let total = text.chars().count();
     Rendered {
-        cursor_back: cursor_at.map(|c| total - c).unwrap_or(0),
+        cursor_back: cursor_at.map(|c| total - c),
         text,
     }
 }
@@ -292,7 +293,7 @@ mod tests {
         v.insert("Tone".to_string(), "B".to_string());
         let r = render(&segs, &v);
         assert_eq!(r.text, "Hi Dana, bye B {{nope}} Dana");
-        assert_eq!(r.cursor_back, "bye B {{nope}} Dana".chars().count());
+        assert_eq!(r.cursor_back, Some("bye B {{nope}} Dana".chars().count()));
     }
 
     #[test]
@@ -405,13 +406,22 @@ mod tests {
     }
 
     #[test]
+    fn a_body_without_a_marker_has_no_cursor_position() {
+        let segs = parse_resolved("Hello {{var:email}}", &variables());
+        assert_eq!(render(&segs, &HashMap::new()).cursor_back, None);
+        // A marker at the very end is still a position, though nothing follows it.
+        let segs = parse_resolved("Hello{{cursor}}", &variables());
+        assert_eq!(render(&segs, &HashMap::new()).cursor_back, Some(0));
+    }
+
+    #[test]
     fn the_cursor_marker_counts_variable_text() {
         let segs = parse_resolved("{{var:address}}{{cursor}}!", &variables());
-        assert_eq!(render(&segs, &HashMap::new()).cursor_back, 1);
+        assert_eq!(render(&segs, &HashMap::new()).cursor_back, Some(1));
         let segs = parse_resolved("{{cursor}}{{var:address}}", &variables());
         assert_eq!(
             render(&segs, &HashMap::new()).cursor_back,
-            "1 Main St\nTown".chars().count()
+            Some("1 Main St\nTown".chars().count())
         );
     }
 
