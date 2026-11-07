@@ -15,6 +15,7 @@ mod snippets;
 mod startup;
 mod state;
 mod template;
+mod theme;
 mod tray;
 mod undo;
 mod usage;
@@ -63,6 +64,8 @@ fn main() {
             commands::resize_palette,
             commands::get_settings,
             commands::save_settings,
+            commands::get_theme,
+            commands::preview_accent,
             commands::set_paused,
             commands::save_snippet,
             commands::delete_snippet,
@@ -79,6 +82,7 @@ fn main() {
             tray::build(&handle)?;
 
             startup::sync_at_startup(&state.config.read().unwrap());
+            commands::set_window_theme(&handle, state.config.read().unwrap().theme);
 
             let hotkey = state.config.read().unwrap().hotkey.clone();
             if let Err(e) = hotkey::register(&handle, &hotkey, None) {

@@ -16,6 +16,26 @@ pub enum InjectMode {
     Clipboard,
 }
 
+/// Whether Bloom's windows are light, dark, or follow Windows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
+impl ThemeMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ThemeMode::System => "system",
+            ThemeMode::Light => "light",
+            ThemeMode::Dark => "dark",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -36,6 +56,13 @@ pub struct Config {
     /// what a `bloom.toml` from before the setting existed has: the Bloom window
     /// asks once. A new install is written with it on.
     pub start_with_windows: Option<bool>,
+    /// Light, dark, or follow Windows.
+    pub theme: ThemeMode,
+    /// The accent colour: "pink" (the original look), one of the ready-made
+    /// colours, or "custom".
+    pub accent: String,
+    /// The colour used when `accent` is "custom", as `#rrggbb`.
+    pub accent_color: String,
 }
 
 impl Default for Config {
@@ -48,11 +75,14 @@ impl Default for Config {
             undo_with_backspace: true,
             rank_by_use: true,
             start_with_windows: None,
+            theme: ThemeMode::System,
+            accent: crate::theme::DEFAULT_ACCENT.into(),
+            accent_color: "#3b82f6".into(),
         }
     }
 }
 
-const DEFAULT_CONFIG: &str = r#"# Bloom settings. You can also change these from the Bloom window.
+const DEFAULT_CONFIG: &str = r##"# Bloom settings. You can also change these from the Bloom window.
 
 # Hotkey that opens snippet search.
 hotkey = "Ctrl+Shift+Space"
@@ -81,7 +111,16 @@ rank_by_use = true
 # Start Bloom when Windows starts, so snippets work without opening it first.
 # Leave this out and the Bloom window asks once.
 start_with_windows = true
-"#;
+
+# How Bloom looks: "system" follows Windows, or choose "light" or "dark".
+theme = "system"
+
+# The accent colour: "pink", "blue", "green", "purple", "orange", "teal", or
+# "custom" to use accent_color. Bloom adjusts a colour a little for each theme so
+# text in it stays readable.
+accent = "pink"
+accent_color = "#3b82f6"
+"##;
 
 const DEFAULT_SNIPPETS: &str = r#"# Your snippets. Bloom reloads this folder as soon as you save a file.
 #
@@ -242,6 +281,9 @@ pub fn save(paths: &Paths, config: &Config) -> Result<()> {
     doc["suggestions"] = toml_edit::value(config.suggestions);
     doc["undo_with_backspace"] = toml_edit::value(config.undo_with_backspace);
     doc["rank_by_use"] = toml_edit::value(config.rank_by_use);
+    doc["theme"] = toml_edit::value(config.theme.as_str());
+    doc["accent"] = toml_edit::value(config.accent.clone());
+    doc["accent_color"] = toml_edit::value(config.accent_color.clone());
     // Not decided yet is the absence of the key, so it is never written as one.
     match config.start_with_windows {
         Some(on) => doc["start_with_windows"] = toml_edit::value(on),
@@ -428,6 +470,71 @@ mod tests {
         assert!(!text.contains("start_with_windows"), "{text}");
         assert!(text.contains("# mine"), "comments are kept");
         assert_eq!(load(&paths).0.start_with_windows, None);
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn the_look_defaults_to_the_original_and_older_files_keep_it() {
+        let config = Config::default();
+        assert_eq!(config.theme, ThemeMode::System);
+        assert_eq!(config.accent, "pink");
+        let paths = temp_paths("look-older");
+        fs::write(
+            &paths.config_file,
+            "hotkey = \"Ctrl+Shift+Space\"
+",
+        )
+        .unwrap();
+        let (loaded, error) = load(&paths);
+        assert!(error.is_none());
+        assert_eq!(loaded.theme, ThemeMode::System);
+        assert_eq!(loaded.accent, "pink");
+        fs::remove_dir_all(&paths.root).ok();
+        let starter: Config = toml::from_str(DEFAULT_CONFIG).unwrap();
+        assert_eq!(
+            (starter.theme, starter.accent.as_str()),
+            (ThemeMode::System, "pink")
+        );
+    }
+
+    #[test]
+    fn the_look_is_saved_and_read_back() {
+        let paths = temp_paths("look-saved");
+        for (theme, accent, color) in [
+            (ThemeMode::Dark, "blue", "#3b82f6"),
+            (ThemeMode::Light, "custom", "#12ab34"),
+            (ThemeMode::System, "pink", "#3b82f6"),
+        ] {
+            let config = Config {
+                theme,
+                accent: accent.into(),
+                accent_color: color.into(),
+                ..Config::default()
+            };
+            save(&paths, &config).unwrap();
+            let loaded = load(&paths).0;
+            assert_eq!(loaded.theme, theme);
+            assert_eq!(loaded.accent, accent);
+            assert_eq!(loaded.accent_color, color);
+            assert!(loaded.rank_by_use, "other settings are untouched");
+        }
+        let text = fs::read_to_string(&paths.config_file).unwrap();
+        assert!(text.contains("theme = \"system\""), "{text}");
+        fs::remove_dir_all(&paths.root).ok();
+    }
+
+    #[test]
+    fn an_unknown_theme_in_the_file_is_reported_and_defaults_are_used() {
+        let paths = temp_paths("look-bad");
+        fs::write(
+            &paths.config_file,
+            "theme = \"sepia\"
+",
+        )
+        .unwrap();
+        let (config, error) = load(&paths);
+        assert!(error.is_some(), "a typo is not silently ignored");
+        assert_eq!(config.theme, ThemeMode::System);
         fs::remove_dir_all(&paths.root).ok();
     }
 
