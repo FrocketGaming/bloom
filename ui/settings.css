@@ -141,10 +141,10 @@ textarea { min-height: 190px; resize: vertical; font-size: 14px !important; line
 .chips select { border: 1px solid var(--line); background: var(--chip); color: inherit; border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12.5px; cursor: pointer; max-width: 150px; }
 .chips select:hover { border-color: var(--accent); }
 
-.preview { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; background: var(--side); }
+.preview { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; background: var(--side); max-height: 300px; overflow-y: auto; }
 .preview-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
 .preview-label span { text-transform: none; letter-spacing: 0; font-weight: 400; }
-.preview pre { margin: 0; font: 13.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; min-height: 1.6em; max-height: 260px; overflow-y: auto; scrollbar-width: thin; }
+.preview pre { margin: 0; font: 13.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; min-height: 1.6em; }
 .var { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
 .field { border-bottom: 1.5px dashed var(--accent); color: var(--accent); }
 .cur { display: inline-block; width: 2px; height: 1.1em; background: var(--accent); vertical-align: text-bottom; margin: 0 1px; }
@@ -253,3 +253,23 @@ select option { background-color: var(--field); color: var(--ink); }
 .custom-color .status { flex: 1 1 100%; min-height: 0; }
 .custom-color .status:empty { display: none; }
 .chip-swatch { display: inline-block; width: 14px; height: 14px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25); vertical-align: -2px; }
+
+/* The two boxes that scroll in the editor draw their own scrollbar, because the
+   native track is a plain rectangle that pokes out of the rounded corners. The
+   track's outer corners follow each box's radius less its 1px border. */
+textarea::-webkit-scrollbar, .preview::-webkit-scrollbar { width: 12px; }
+textarea::-webkit-scrollbar-track { background: var(--chip); border-radius: 0 6px 6px 0; }
+.preview::-webkit-scrollbar-track { background: var(--chip); border-radius: 0 8px 8px 0; }
+textarea::-webkit-scrollbar-thumb, .preview::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 60%, transparent); background-clip: padding-box;
+  border: 3px solid transparent; border-radius: 6px;
+}
+textarea::-webkit-scrollbar-thumb:hover, .preview::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }
+textarea::-webkit-scrollbar-corner, .preview::-webkit-scrollbar-corner { background: transparent; }
+.tree::-webkit-scrollbar, .main::-webkit-scrollbar { width: 12px; }
+.tree::-webkit-scrollbar-track, .main::-webkit-scrollbar-track { background: transparent; }
+.tree::-webkit-scrollbar-thumb, .main::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 60%, transparent); background-clip: padding-box;
+  border: 3px solid transparent; border-radius: 6px;
+}
+.tree::-webkit-scrollbar-thumb:hover, .main::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }

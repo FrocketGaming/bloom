@@ -23,6 +23,9 @@ pub struct AppState {
     pub store: RwLock<Store>,
     pub variables: RwLock<Variables>,
     pub paused: AtomicBool,
+    /// The settings window holds edits that aren't saved yet. While it does,
+    /// closing it only hides it.
+    pub settings_unsaved: AtomicBool,
     /// The window that was active before the palette opened; text goes back there.
     pub prev_window: Mutex<Option<isize>>,
     pub pending_form: Mutex<Option<PendingForm>>,
@@ -36,6 +39,18 @@ impl AppState {
     pub fn reload_snippets(&self) {
         let store = Store::load(&self.paths.snippets_dir);
         *self.store.write().unwrap() = store;
+    }
+
+    /// Reloads only if the folder differs from what was last loaded. Saving in
+    /// Bloom reloads straight away, and the folder watcher then reports the
+    /// same write; this stops that second, identical reload. True if it reloaded.
+    pub fn reload_snippets_if_changed(&self) -> bool {
+        let now = crate::snippets::fingerprint(&self.paths.snippets_dir);
+        if self.store.read().unwrap().fingerprint == now {
+            return false;
+        }
+        self.reload_snippets();
+        true
     }
 
     pub fn reload_variables(&self) {

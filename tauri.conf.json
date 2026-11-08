@@ -24,7 +24,8 @@
         "focus": true,
         "center": true,
         "shadow": true,
-        "windowEffects": { "effects": ["acrylic"] }
+        "windowEffects": { "effects": ["acrylic"] },
+        "additionalBrowserArgs": "--disable-gpu --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
       },
       {
         "label": "dropdown",
@@ -41,18 +42,8 @@
         "focus": false,
         "focusable": false,
         "shadow": true,
-        "windowEffects": { "effects": ["acrylic"] }
-      },
-      {
-        "label": "settings",
-        "title": "Bloom",
-        "url": "settings.html",
-        "width": 1000,
-        "height": 680,
-        "minWidth": 780,
-        "minHeight": 500,
-        "visible": false,
-        "center": true
+        "windowEffects": { "effects": ["acrylic"] },
+        "additionalBrowserArgs": "--disable-gpu --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
       }
     ],
     "security": {

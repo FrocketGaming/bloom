@@ -150,6 +150,27 @@ pub fn missing(resolved: &[Seg]) -> Vec<String> {
     variable_names(resolved)
 }
 
+/// `missing`, worked out from unresolved segments without building a resolved
+/// copy of the body.
+pub fn missing_in(segs: &[Seg], variables: &Variables) -> Vec<String> {
+    let mut names = variable_names(segs);
+    names.retain(|name| variables.get(name).is_none());
+    names
+}
+
+/// True when inserting the body asks for a form: it has a `{{field}}`, or uses a
+/// variable that is a list of choices. Same answer as resolving the body and
+/// calling `fields`, without cloning its text.
+pub fn needs_form(segs: &[Seg], variables: &Variables) -> bool {
+    segs.iter().any(|seg| match seg {
+        Seg::Field { .. } => true,
+        Seg::UserVar { name, .. } => variables
+            .get(name)
+            .is_some_and(|v| matches!(v.content, Content::Choices(_))),
+        _ => false,
+    })
+}
+
 pub fn fields(segs: &[Seg]) -> Vec<FieldSpec> {
     let mut out: Vec<FieldSpec> = Vec::new();
     for s in segs {
@@ -329,6 +350,29 @@ mod tests {
                 },
             ],
             errors: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn the_cheap_checks_agree_with_resolving_the_body() {
+        let vars = variables();
+        for body in [
+            "plain",
+            "{{field:Name}}",
+            "{{var:email}}",
+            "{{var:SIGNOFF}}",
+            "{{var:nope}} and {{var:Nope}}",
+            "{{var:note}}",
+            "{{var:email}} {{var:missing}} {{var:signoff}}",
+        ] {
+            let segs = parse(body);
+            let resolved = resolve(&segs, &vars);
+            assert_eq!(
+                needs_form(&segs, &vars),
+                !fields(&resolved).is_empty(),
+                "{body}"
+            );
+            assert_eq!(missing_in(&segs, &vars), missing(&resolved), "{body}");
         }
     }
 

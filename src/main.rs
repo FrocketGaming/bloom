@@ -43,6 +43,7 @@ fn main() {
         store: RwLock::new(store),
         variables: RwLock::new(variables),
         paused: AtomicBool::new(false),
+        settings_unsaved: AtomicBool::new(false),
         prev_window: Mutex::new(None),
         pending_form: Mutex::new(None),
         undo: Mutex::new(None),
@@ -58,6 +59,7 @@ fn main() {
         .manage(state.clone())
         .invoke_handler(tauri::generate_handler![
             commands::list_snippets,
+            commands::preview_snippet,
             commands::preview_body,
             commands::insert_snippet,
             commands::hide_palette,
@@ -67,6 +69,7 @@ fn main() {
             commands::get_theme,
             commands::preview_accent,
             commands::set_paused,
+            commands::set_settings_unsaved,
             commands::save_snippet,
             commands::delete_snippet,
             commands::delete_snippet_file,
@@ -78,7 +81,6 @@ fn main() {
             let handle = app.handle().clone();
             palette::setup(&handle);
             dropdown::setup(&handle);
-            settings::setup(&handle);
             tray::build(&handle)?;
 
             startup::sync_at_startup(&state.config.read().unwrap());
@@ -93,8 +95,9 @@ fn main() {
             let watch_handle = handle.clone();
             let watch_state = state.clone();
             if let Err(e) = snippets::watch(&state.paths.snippets_dir, move || {
-                watch_state.reload_snippets();
-                let _ = watch_handle.emit("snippets-changed", ());
+                if watch_state.reload_snippets_if_changed() {
+                    let _ = watch_handle.emit("snippets-changed", ());
+                }
             }) {
                 eprintln!("bloom: not watching snippet files: {e}");
             }

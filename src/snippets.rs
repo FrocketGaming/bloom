@@ -1,13 +1,14 @@
 //! Loading, saving and watching the snippet files in the snippets folder.
 
+use crate::template::{self, Seg};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value};
 
 #[derive(Deserialize, Default)]
@@ -41,6 +42,10 @@ pub struct Snippet {
     pub name: String,
     pub body: String,
     pub word: bool,
+    /// The body parsed once at load, so no caller has to parse it again. Variables
+    /// are not looked up yet; see `template::resolve`.
+    #[serde(skip)]
+    pub segs: Arc<Vec<Seg>>,
 }
 
 /// A trigger prepared for the matcher.
@@ -55,13 +60,47 @@ pub struct Trigger {
 pub struct Store {
     pub snippets: Vec<Snippet>,
     pub triggers: Arc<Vec<Trigger>>,
+    /// Snippet id -> position in `snippets`.
+    index: HashMap<String, usize>,
+    /// The folder as it was when this store was loaded.
+    pub fingerprint: Fingerprint,
     pub errors: Vec<String>,
     pub files: Vec<String>,
 }
 
+/// What the snippets folder looked like: each `.toml` file with its size and
+/// modification time. Two equal fingerprints mean there is nothing to reload.
+pub type Fingerprint = Vec<(String, u64, Option<SystemTime>)>;
+
+/// Takes the fingerprint of `dir`. A folder that can't be read gives an empty one.
+pub fn fingerprint(dir: &Path) -> Fingerprint {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Fingerprint = entries
+        .flatten()
+        .filter(|e| e.path().extension().is_some_and(|x| x == "toml"))
+        .filter_map(|e| {
+            let meta = e.metadata().ok()?;
+            Some((
+                e.file_name().to_string_lossy().into_owned(),
+                meta.len(),
+                meta.modified().ok(),
+            ))
+        })
+        .collect();
+    files.sort();
+    files
+}
+
 impl Store {
     pub fn load(dir: &Path) -> Store {
-        let mut store = Store::default();
+        // Taken before reading, so a file changed during the load shows up as
+        // a difference next time instead of being missed.
+        let mut store = Store {
+            fingerprint: fingerprint(dir),
+            ..Store::default()
+        };
         let mut paths = Vec::new();
         match fs::read_dir(dir) {
             Ok(entries) => paths.extend(
@@ -103,6 +142,7 @@ impl Store {
                     .filter(|n| !n.trim().is_empty())
                     .or_else(|| trigger.clone())
                     .unwrap_or_else(|| first_line(&raw.body));
+                let body = raw.body.replace("\r\n", "\n");
                 store.snippets.push(Snippet {
                     id: format!("{file}#{index}"),
                     file: file.clone(),
@@ -110,7 +150,8 @@ impl Store {
                     group: group.clone(),
                     trigger,
                     name,
-                    body: raw.body.replace("\r\n", "\n"),
+                    segs: Arc::new(template::parse(&body)),
+                    body,
                     word: raw.word,
                 });
             }
@@ -129,6 +170,12 @@ impl Store {
                 })
                 .collect(),
         );
+        store.index = store
+            .snippets
+            .iter()
+            .enumerate()
+            .map(|(position, s)| (s.id.clone(), position))
+            .collect();
         // Hand-edited files can repeat a trigger. The matcher keeps the last
         // match, so say so instead of letting a snippet quietly never fire.
         let mut seen = HashSet::new();
@@ -147,7 +194,7 @@ impl Store {
     }
 
     pub fn get(&self, id: &str) -> Option<&Snippet> {
-        self.snippets.iter().find(|s| s.id == id)
+        self.index.get(id).map(|&position| &self.snippets[position])
     }
 }
 
@@ -464,6 +511,36 @@ mod tests {
         assert!(safe_file_name("What?").is_err());
         assert!(safe_file_name("   ").is_err());
         assert!(safe_file_name(".hidden").is_err());
+    }
+
+    #[test]
+    fn the_fingerprint_changes_only_when_a_snippet_file_does() {
+        let dir = std::env::temp_dir().join(format!("bloom-print-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("a.toml"), "[[snippet]]\nbody = \"1\"\n").unwrap();
+        let store = Store::load(&dir);
+        assert_eq!(store.fingerprint, fingerprint(&dir), "nothing changed yet");
+        // Other files, such as the temporary one a save writes, are ignored.
+        fs::write(dir.join("a.toml.bloom-tmp"), "x").unwrap();
+        assert_eq!(store.fingerprint, fingerprint(&dir));
+        fs::write(dir.join("a.toml"), "[[snippet]]\nbody = \"12\"\n").unwrap();
+        assert_ne!(store.fingerprint, fingerprint(&dir), "an edit shows up");
+        fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn snippets_are_found_by_id() {
+        let dir = std::env::temp_dir().join(format!("bloom-index-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(
+            dir.join("a.toml"),
+            "[[snippet]]\nbody = \"one\"\n[[snippet]]\nbody = \"two\"\n",
+        )
+        .unwrap();
+        let store = Store::load(&dir);
+        assert_eq!(store.get("a.toml#1").unwrap().body, "two");
+        assert!(store.get("a.toml#2").is_none());
+        fs::remove_dir_all(&dir).ok();
     }
 
     #[test]

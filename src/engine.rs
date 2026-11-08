@@ -9,7 +9,7 @@ use crate::{dropdown, palette, platform, template};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
-use std::sync::mpsc;
+use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::Duration;
 use tauri::AppHandle;
@@ -29,7 +29,7 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
             // text no longer looks like the start of a trigger.
             let mut dismissed = false;
             let mut last_window = 0isize;
-            for ev in rx {
+            while let Ok(ev) = rx.recv() {
                 // Any key ends the chance to take back the last expansion, so it
                 // is taken out here and only used if this key is Backspace.
                 let undo = state.undo.lock().unwrap().take();
@@ -58,14 +58,22 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
                     continue;
                 }
                 if let KeyEvent::Nav(nav) = ev {
-                    handle_nav(&app, &state, &mut matcher, &mut menu, &mut dismissed, nav);
+                    handle_nav(
+                        &app,
+                        &state,
+                        &rx,
+                        &mut matcher,
+                        &mut menu,
+                        &mut dismissed,
+                        nav,
+                    );
                     continue;
                 }
                 let triggers = state.store.read().unwrap().triggers.clone();
                 if let Some(hit) = matcher.feed(ev, &triggers) {
                     close_menu(&app, &mut menu);
                     dismissed = false;
-                    expand(&app, &state, hit, None);
+                    expand(&app, &state, &rx, hit, None);
                     continue;
                 }
                 let suggestion = if state.config.read().unwrap().suggestions {
@@ -134,6 +142,7 @@ fn close_menu(app: &AppHandle, menu: &mut Option<dropdown::Menu>) {
 fn handle_nav(
     app: &AppHandle,
     state: &Arc<AppState>,
+    rx: &Receiver<KeyEvent>,
     matcher: &mut Matcher,
     menu: &mut Option<dropdown::Menu>,
     dismissed: &mut bool,
@@ -160,7 +169,7 @@ fn handle_nav(
                     trailing: String::new(),
                 };
                 // Cancelling a form puts back what was actually typed.
-                expand(app, state, hit, Some(typed));
+                expand(app, state, rx, hit, Some(typed));
             }
         }
     }
@@ -169,13 +178,27 @@ fn handle_nav(
 /// Inserts the snippet a trigger (or the suggestion list) picked. `restore` is
 /// the text to put back if a fill-in form is cancelled; by default that is the
 /// trigger plus whatever followed it.
-fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit, restore: Option<String>) {
+fn expand(
+    app: &AppHandle,
+    state: &Arc<AppState>,
+    rx: &Receiver<KeyEvent>,
+    mut hit: Hit,
+    restore: Option<String>,
+) {
     let Some(snippet) = state.store.read().unwrap().get(&hit.id).cloned() else {
         return;
     };
-    let segs = template::parse_resolved(&snippet.body, &state.variables.read().unwrap());
+    let segs = template::resolve(&snippet.segs, &state.variables.read().unwrap());
 
+    // From here until the expansion is typed, what the user types waits its
+    // turn instead of landing in the middle of it. Keys that got through
+    // before the hold began are already on screen and are taken in below.
+    platform::begin_hold();
     platform::wait_for_typing_to_settle();
+    if !absorb_late_keys(rx, &mut hit) {
+        platform::finish_hold();
+        return;
+    }
     platform::backspace(hit.delete);
 
     // What the user typed, erased above to make way for the expansion. It is
@@ -198,6 +221,9 @@ fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit, restore: Option<Stri
             trailing: hit.trailing,
             restore: typed,
         });
+        // The palette takes the keyboard from here, so keys held back for the
+        // app they were aimed at are dropped rather than typed into the wrong place.
+        platform::discard_hold();
         palette::open(app, Some(snippet.id));
         return;
     }
@@ -205,14 +231,45 @@ fn expand(app: &AppHandle, state: &Arc<AppState>, hit: Hit, restore: Option<Stri
     let rendered = template::render(&segs, &HashMap::new());
     deliver(state, &rendered.text, &hit.trailing, rendered.cursor_back);
     usage::record_use(state, &snippet);
-    remember_undo(
-        state,
-        &rendered.text,
-        &hit.trailing,
-        rendered.cursor_back,
-        typed,
-        usage::key_of(&snippet),
-    );
+    // Whatever the user typed meanwhile goes in after the expansion. Backspace
+    // could no longer take the expansion back cleanly, so it can't be undone.
+    if platform::finish_hold() {
+        *state.undo.lock().unwrap() = None;
+    } else {
+        remember_undo(
+            state,
+            &rendered.text,
+            &hit.trailing,
+            rendered.cursor_back,
+            typed,
+            usage::key_of(&snippet),
+        );
+    }
+}
+
+/// Takes in the keys typed between the trigger's last key and the moment Bloom
+/// is ready to type (it waits for the keyboard to go quiet first). They are
+/// already in the app, after the trigger, so the erase has to cover them and
+/// they are typed back after the expansion, as for a trigger that is the start
+/// of a longer one. Without this, a key typed right after the trigger made
+/// Bloom erase one character too few of the trigger and one too many of the
+/// text around it, leaving a stray `;` or splitting the expansion.
+///
+/// Returns false when the expansion should be dropped: the user backspaced into
+/// the trigger, or moved the cursor, so what is on screen is no longer a trigger
+/// followed by plain typing.
+fn absorb_late_keys(rx: &Receiver<KeyEvent>, hit: &mut Hit) -> bool {
+    while let Ok(ev) = rx.try_recv() {
+        match ev {
+            KeyEvent::Char(c) => {
+                hit.trailing.push(c);
+                hit.delete += 1;
+            }
+            KeyEvent::Backspace if hit.trailing.pop().is_some() => hit.delete -= 1,
+            KeyEvent::Backspace | KeyEvent::Reset | KeyEvent::Nav(_) => return false,
+        }
+    }
+    true
 }
 
 /// How far left of the end of the inserted text the cursor goes. A body with a
@@ -286,6 +343,55 @@ pub fn dismiss_palette(state: &AppState) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn hit(delete: usize) -> Hit {
+        Hit {
+            id: "a#0".into(),
+            delete,
+            trailing: String::new(),
+        }
+    }
+
+    fn queued(events: &[KeyEvent]) -> Receiver<KeyEvent> {
+        let (tx, rx) = mpsc::channel();
+        for ev in events {
+            tx.send(*ev).unwrap();
+        }
+        rx
+    }
+
+    #[test]
+    fn keys_typed_while_waiting_are_erased_and_typed_back() {
+        let rx = queued(&[KeyEvent::Char(' '), KeyEvent::Char('x')]);
+        let mut h = hit(4);
+        assert!(absorb_late_keys(&rx, &mut h));
+        assert_eq!(h.delete, 6, "the trigger and the two keys after it");
+        assert_eq!(h.trailing, " x");
+    }
+
+    #[test]
+    fn a_backspace_takes_back_a_late_key_but_not_the_trigger() {
+        let rx = queued(&[KeyEvent::Char(' '), KeyEvent::Backspace]);
+        let mut h = hit(4);
+        assert!(absorb_late_keys(&rx, &mut h));
+        assert_eq!((h.delete, h.trailing.as_str()), (4, ""));
+        // Nothing left to take back: the user is editing the trigger itself.
+        let rx = queued(&[KeyEvent::Backspace]);
+        assert!(!absorb_late_keys(&rx, &mut hit(4)));
+    }
+
+    #[test]
+    fn moving_the_cursor_drops_the_expansion() {
+        let rx = queued(&[KeyEvent::Char(' '), KeyEvent::Reset]);
+        assert!(!absorb_late_keys(&rx, &mut hit(4)));
+    }
+
+    #[test]
+    fn nothing_typed_while_waiting_changes_nothing() {
+        let mut h = hit(4);
+        assert!(absorb_late_keys(&queued(&[]), &mut h));
+        assert_eq!((h.delete, h.trailing.as_str()), (4, ""));
+    }
 
     #[test]
     fn without_a_cursor_marker_the_cursor_stays_at_the_end() {

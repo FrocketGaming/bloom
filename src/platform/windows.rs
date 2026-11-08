@@ -1,4 +1,5 @@
 use crate::matcher::{KeyEvent, Nav};
+use std::borrow::Cow;
 use std::mem::{size_of, zeroed};
 use std::ptr::{null, null_mut};
 use std::sync::OnceLock;
@@ -39,6 +40,80 @@ static LAST_INPUT_MS: AtomicU64 = AtomicU64::new(0);
 /// Enter, Tab and Esc. It expires by itself so that a stuck list can never
 /// leave those keys dead.
 static LIST_KEYS_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
+
+/// Until when (in `clock` milliseconds) the characters you type are held back
+/// instead of reaching the app. Bloom holds them while it erases a trigger and
+/// types the expansion, so that nothing you type lands in the middle of it, and
+/// types them afterwards. Like the list keys, it expires by itself so a stuck
+/// hold can never leave the keyboard dead.
+static HOLD_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
+
+/// The characters held back so far, in the order they were typed.
+static HELD_BACK: std::sync::Mutex<Vec<char>> = std::sync::Mutex::new(Vec::new());
+
+/// How long a hold lasts without being ended. Longer than any expansion should take.
+const HOLD_LEASE_MS: u64 = 5_000;
+
+/// The most characters one hold keeps; a key held down repeats quickly.
+const HOLD_LIMIT: usize = 64;
+
+/// Starts holding back the characters you type. Pair with `finish_hold` or
+/// `discard_hold`.
+pub fn begin_hold() {
+    if let Ok(mut held) = HELD_BACK.lock() {
+        held.clear();
+        HOLD_UNTIL_MS.store(clock() + HOLD_LEASE_MS, Ordering::Relaxed);
+    }
+}
+
+/// Ends the hold and types what was held back, now that Bloom is done typing.
+/// Characters that arrive while those are typed are held and typed too, so none
+/// can slip in between. Returns true if anything was typed.
+pub fn finish_hold() -> bool {
+    let mut typed_any = false;
+    loop {
+        let held: String = {
+            let Ok(mut held) = HELD_BACK.lock() else {
+                return typed_any;
+            };
+            if held.is_empty() {
+                HOLD_UNTIL_MS.store(0, Ordering::Relaxed);
+                return typed_any;
+            }
+            held.drain(..).collect()
+        };
+        type_text(&held);
+        typed_any = true;
+    }
+}
+
+/// Ends the hold and forgets what was held back.
+pub fn discard_hold() {
+    if let Ok(mut held) = HELD_BACK.lock() {
+        held.clear();
+        HOLD_UNTIL_MS.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Keeps a typed character back while a hold is on. True if the key was kept
+/// and must not reach the app.
+unsafe fn hold_back(k: &KBDLLHOOKSTRUCT) -> bool {
+    if clock() >= HOLD_UNTIL_MS.load(Ordering::Relaxed) {
+        return false;
+    }
+    let Some(KeyEvent::Char(c)) = (unsafe { translate(k) }) else {
+        return false;
+    };
+    let Ok(mut held) = HELD_BACK.lock() else {
+        return false;
+    };
+    // Checked again under the lock: `finish_hold` ends the hold while holding it.
+    if clock() >= HOLD_UNTIL_MS.load(Ordering::Relaxed) || held.len() >= HOLD_LIMIT {
+        return false;
+    }
+    held.push(c);
+    true
+}
 
 /// Keys whose press Bloom swallowed, so their release is swallowed too.
 static SWALLOWED: [AtomicBool; 256] = [const { AtomicBool::new(false) }; 256];
@@ -114,9 +189,15 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
             let msg = wparam as u32;
             let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
             if k.dwExtraInfo != BLOOM_TAG {
-                HELD[(k.vkCode & 0xFF) as usize].store(down, Ordering::Relaxed);
-                LAST_INPUT_MS.store(clock(), Ordering::Relaxed);
                 let index = (k.vkCode & 0xFF) as usize;
+                // While Bloom is typing, your characters wait their turn. They
+                // are not "input" for the settle check, as they never reach the app.
+                if down && hold_back(k) {
+                    SWALLOWED[index].store(true, Ordering::Relaxed);
+                    return 1;
+                }
+                HELD[index].store(down, Ordering::Relaxed);
+                LAST_INPUT_MS.store(clock(), Ordering::Relaxed);
                 if !down && SWALLOWED[index].swap(false, Ordering::Relaxed) {
                     return 1;
                 }
@@ -227,9 +308,10 @@ unsafe fn translate(k: &KBDLLHOOKSTRUCT) -> Option<KeyEvent> {
             n if n < 0 => None,         // dead key, wait for the next one
             0 => Some(KeyEvent::Reset), // arrows, Home, F-keys, Esc…
             n => {
-                let s = String::from_utf16_lossy(&buf[..n as usize]);
-                match s.chars().last() {
-                    Some(c) if !c.is_control() => Some(KeyEvent::Char(c)),
+                // Decoded in place: this runs inside the keyboard hook, which
+                // Windows cuts off if it is slow, so it must not allocate.
+                match char::decode_utf16(buf[..n as usize].iter().copied()).last() {
+                    Some(Ok(c)) if !c.is_control() => Some(KeyEvent::Char(c)),
                     _ => Some(KeyEvent::Reset),
                 }
             }
@@ -389,8 +471,9 @@ pub fn type_text(text: &str) {
     // Caps Lock flips letters typed as keys, so flip Shift back for them.
     let caps = unsafe { GetKeyState(VK_CAPITAL as i32) & 1 != 0 };
     let mut first = true;
+    let mut v = Vec::with_capacity(6);
     for ch in text.chars() {
-        let mut v = Vec::with_capacity(6);
+        v.clear();
         match ch {
             '\r' => continue,
             '\n' => {
@@ -505,7 +588,7 @@ pub fn paste_text(text: &str) {
     // Only press Ctrl+V once the clipboard really holds the snippet; a sync
     // tool can grab the clipboard between our write and the paste.
     let ready = retry(|| {
-        clip.set_text(pasteable.clone()).ok()?;
+        clip.set_text(pasteable.as_str()).ok()?;
         let now = clip.get_text().ok()?;
         same_text(&now, &pasteable).then_some(())
     });
@@ -543,10 +626,19 @@ pub fn paste_text(text: &str) {
         }
         match previous {
             Previous::Text(t) => {
-                retry(|| clip.set_text(t.clone()).ok());
+                retry(|| clip.set_text(t.as_str()).ok());
             }
             Previous::Image(img) => {
-                retry(|| clip.set_image(img.clone()).ok());
+                // Borrowed on each attempt: a screenshot can be tens of
+                // megabytes, and a retry must not copy it again.
+                retry(|| {
+                    clip.set_image(arboard::ImageData {
+                        width: img.width,
+                        height: img.height,
+                        bytes: Cow::Borrowed(&img.bytes),
+                    })
+                    .ok()
+                });
             }
             // The clipboard was empty or held something Bloom can't copy
             // (files, rich formats). Leave the snippet rather than wipe it.

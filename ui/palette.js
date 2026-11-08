@@ -17,6 +17,20 @@ function subseq(needle, hay) {
   return i === needle.length;
 }
 
+/** Lower-cases the text searches look at, once per load rather than once per
+ *  snippet on every keystroke. */
+function prepare(list) {
+  for (const s of list) {
+    s.lcTrigger = (s.trigger || '').toLowerCase();
+    s.lcBare = s.lcTrigger.replace(/^\W+/, '');
+    s.lcName = s.name.toLowerCase();
+    s.lcGroup = s.group.toLowerCase();
+    s.lcBody = s.body.toLowerCase();
+    s.lcTriggerName = `${s.lcTrigger} ${s.lcName}`;
+  }
+  return list;
+}
+
 function search(query) {
   const qq = query.toLowerCase().trim();
   // Nothing typed yet: the snippets used most come first, and the rest keep
@@ -25,17 +39,16 @@ function search(query) {
   const bare = qq.replace(/^[^\p{L}\p{N}]+/u, '');
   const scored = [];
   for (const s of all) {
-    const t = (s.trigger || '').toLowerCase();
-    const n = s.name.toLowerCase();
+    const t = s.lcTrigger;
     let score = -1;
     if (t && t.startsWith(qq)) score = 100 - t.length;
-    else if (t && t.replace(/^\W+/, '').startsWith(bare)) score = 90 - t.length;
-    else if (n.startsWith(bare)) score = 70;
-    else if (n.includes(bare)) score = 60;
+    else if (t && s.lcBare.startsWith(bare)) score = 90 - t.length;
+    else if (s.lcName.startsWith(bare)) score = 70;
+    else if (s.lcName.includes(bare)) score = 60;
     else if (t.includes(bare)) score = 50;
-    else if (s.group.toLowerCase().includes(bare)) score = 40;
-    else if (s.body.toLowerCase().includes(bare)) score = 30;
-    else if (subseq(bare, `${t} ${n}`)) score = 10;
+    else if (s.lcGroup.includes(bare)) score = 40;
+    else if (s.lcBody.includes(bare)) score = 30;
+    else if (subseq(bare, s.lcTriggerName)) score = 10;
     if (score >= 0) scored.push({ s, score });
   }
   // How well it matches decides first; use only breaks ties between equally
@@ -86,42 +99,98 @@ function fit() {
 
 // ---------- Search mode ----------
 
-function renderList() {
-  items = search(q.value);
-  if (sel >= items.length) sel = Math.max(0, items.length - 1);
-  const list = $('list');
-  if (!all.length) {
-    list.innerHTML = '<div class="empty">You have no snippets yet. Open Bloom from the tray icon to add one.</div>';
-  } else if (!items.length) {
-    list.innerHTML = `<div class="empty">No snippets match “${esc(q.value)}”.</div>`;
-  } else {
-    list.innerHTML = items.map((s, i) => `
+// Rows are added to the page a batch at a time as the list is scrolled, so a
+// large library never means thousands of rows to build on every keystroke.
+const BATCH = 50;
+let rendered = 0;
+
+function rowHTML(s, i) {
+  return `
       <div class="row" data-i="${i}" role="option" aria-selected="false">
         ${s.trigger ? `<span class="trig">${highlight(s.trigger, q.value)}</span>` : '<span class="trig none">search</span>'}
         <span class="name">${highlight(s.name, q.value)}</span>
         ${s.fields.length ? '<span class="form-tag">form</span>' : ''}
         <span class="grp">${esc(s.group)}</span>
-      </div>`).join('');
+      </div>`;
+}
+
+/** Adds rows until row `upTo` (at least one more batch) is on the page. */
+function renderMore(upTo) {
+  const end = Math.min(items.length, Math.max(upTo + 1, rendered + BATCH));
+  if (end <= rendered) return;
+  let html = '';
+  for (let i = rendered; i < end; i++) html += rowHTML(items[i], i);
+  $('list').insertAdjacentHTML('beforeend', html);
+  rendered = end;
+}
+
+function renderList() {
+  items = search(q.value);
+  if (sel >= items.length) sel = Math.max(0, items.length - 1);
+  const list = $('list');
+  rendered = 0;
+  selectedRow = null;
+  if (!all.length) {
+    list.innerHTML = '<div class="empty">You have no snippets yet. Open Bloom from the tray icon to add one.</div>';
+  } else if (!items.length) {
+    list.innerHTML = `<div class="empty">No snippets match “${esc(q.value)}”.</div>`;
+  } else {
+    list.innerHTML = '';
+    renderMore(sel);
   }
   selectRow(sel, true);
-  fit();
+}
+
+$('list').addEventListener('scroll', () => {
+  const list = $('list');
+  if (rendered < items.length && list.scrollTop + list.clientHeight >= list.scrollHeight - 80) {
+    renderMore(rendered);
+  }
+});
+
+let selectedRow = null;
+let previewToken = 0;
+
+/** The preview of a snippet, asked for once and kept until the list is next
+ *  loaded. Previews are built on demand because building one for every snippet
+ *  would read the clipboard and the clock for all of them. */
+async function previewOf(s) {
+  if (!s.preview) {
+    try { s.preview = await invoke('preview_snippet', { id: s.id }); } catch { s.preview = []; }
+  }
+  return s.preview;
 }
 
 /** Moves the highlight without rebuilding the list: hovering used to redraw
- *  every row each time the pointer crossed one. */
+ *  every row each time the pointer crossed one. Only the old and the new row
+ *  are touched. */
 function selectRow(i, scroll) {
   sel = i;
-  $('list').querySelectorAll('.row').forEach((row) => {
-    const on = +row.dataset.i === i;
-    row.classList.toggle('sel', on);
-    row.setAttribute('aria-selected', String(on));
-    if (on && scroll) row.scrollIntoView({ block: 'nearest' });
-  });
+  if (i >= rendered) renderMore(i);
+  const row = items.length ? $('list').children[i] : null;
+  if (selectedRow && selectedRow !== row) {
+    selectedRow.classList.remove('sel');
+    selectedRow.setAttribute('aria-selected', 'false');
+  }
+  selectedRow = row;
+  if (row) {
+    row.classList.add('sel');
+    row.setAttribute('aria-selected', 'true');
+    if (scroll) row.scrollIntoView({ block: 'nearest' });
+  }
   const s = items[sel];
   $('prev').hidden = !s;
-  if (s) $('prev').innerHTML = `<div class="prev-label">Inserts</div><pre class="prev-body">${partsHTML(s.preview)}</pre>`;
-  // A longer preview makes the content taller, and the window has to follow or
-  // the whole panel grows a second scrollbar beside the list's.
+  if (s) {
+    const token = ++previewToken;
+    const show = (parts) => {
+      $('prev').innerHTML = `<div class="prev-label">Inserts</div><pre class="prev-body">${partsHTML(parts)}</pre>`;
+      // A longer preview makes the content taller, and the window has to follow
+      // or the whole panel grows a second scrollbar beside the list's.
+      fit();
+    };
+    if (s.preview) show(s.preview);
+    else previewOf(s).then((parts) => { if (token === previewToken) show(parts); });
+  }
   fit();
 }
 
@@ -178,7 +247,8 @@ function updateFormPreview() {
   $('f-prev').innerHTML = partsHTML(formSnippet.preview, formValues());
 }
 
-function showForm(s) {
+async function showForm(s) {
+  await previewOf(s);
   formSnippet = s;
   $('search-view').hidden = true;
   $('form-view').hidden = false;
@@ -225,14 +295,14 @@ document.addEventListener('keydown', (e) => {
 });
 
 async function load() {
-  try { all = await invoke('list_snippets'); } catch { all = []; }
+  try { all = prepare(await invoke('list_snippets')); } catch { all = []; }
 }
 
 listen('palette-open', async (e) => {
   await load();
   const formId = e.payload && e.payload.form;
   const s = formId && all.find((x) => x.id === formId);
-  if (s) showForm(s); else showSearch();
+  if (s) await showForm(s); else showSearch();
 });
 
 listen('snippets-changed', async () => {

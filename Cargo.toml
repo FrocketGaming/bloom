@@ -11,7 +11,7 @@ publish = false
 [dependencies]
 anyhow = "1.0.104"
 arboard = "3.7.0"
-chrono = "0.4.45"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 dirs = "7.0.0"
 notify-debouncer-mini = "0.7.0"
 serde = { version = "1.0.229", features = ["derive"] }
@@ -31,3 +31,10 @@ windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_UI_Wi
 
 [build-dependencies]
 tauri-build = { version = "2.7.4", features = [] }
+
+# Smaller and faster release builds. panic stays "unwind" on purpose: a panic in
+# the engine thread then stops only that thread instead of the whole tray app.
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
