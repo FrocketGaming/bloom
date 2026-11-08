@@ -141,10 +141,10 @@ textarea { min-height: 190px; scrollbar-width: thin; resize: vertical; font-size
 .chips select { border: 1px solid var(--line); background: var(--chip); color: inherit; border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12.5px; cursor: pointer; max-width: 150px; }
 .chips select:hover { border-color: var(--accent); }
 
-.preview { border: 1px solid var(--line); border-radius: 9px; padding: 12px 0 12px 14px; background: var(--side); }
+.preview { border: 1px solid var(--line); border-radius: 9px; padding: 12px 0 0 14px; background: var(--side); overflow: hidden; }
 .preview-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
 .preview-label span { text-transform: none; letter-spacing: 0; font-weight: 400; }
-.preview pre { margin: 0; padding-right: 14px; font: 13.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; min-height: 1.6em; max-height: 260px; overflow-y: auto; scrollbar-width: thin; }
+.preview pre { margin: 0; padding: 0 14px 12px 0; font: 13.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; min-height: 1.6em; max-height: 260px; overflow-y: auto; scrollbar-width: thin; }
 .var { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
 .field { border-bottom: 1.5px dashed var(--accent); color: var(--accent); }
 .cur { display: inline-block; width: 2px; height: 1.1em; background: var(--accent); vertical-align: text-bottom; margin: 0 1px; }
