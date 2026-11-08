@@ -41,6 +41,80 @@ static LAST_INPUT_MS: AtomicU64 = AtomicU64::new(0);
 /// leave those keys dead.
 static LIST_KEYS_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
 
+/// Until when (in `clock` milliseconds) the characters you type are held back
+/// instead of reaching the app. Bloom holds them while it erases a trigger and
+/// types the expansion, so that nothing you type lands in the middle of it, and
+/// types them afterwards. Like the list keys, it expires by itself so a stuck
+/// hold can never leave the keyboard dead.
+static HOLD_UNTIL_MS: AtomicU64 = AtomicU64::new(0);
+
+/// The characters held back so far, in the order they were typed.
+static HELD_BACK: std::sync::Mutex<Vec<char>> = std::sync::Mutex::new(Vec::new());
+
+/// How long a hold lasts without being ended. Longer than any expansion should take.
+const HOLD_LEASE_MS: u64 = 5_000;
+
+/// The most characters one hold keeps; a key held down repeats quickly.
+const HOLD_LIMIT: usize = 64;
+
+/// Starts holding back the characters you type. Pair with `finish_hold` or
+/// `discard_hold`.
+pub fn begin_hold() {
+    if let Ok(mut held) = HELD_BACK.lock() {
+        held.clear();
+        HOLD_UNTIL_MS.store(clock() + HOLD_LEASE_MS, Ordering::Relaxed);
+    }
+}
+
+/// Ends the hold and types what was held back, now that Bloom is done typing.
+/// Characters that arrive while those are typed are held and typed too, so none
+/// can slip in between. Returns true if anything was typed.
+pub fn finish_hold() -> bool {
+    let mut typed_any = false;
+    loop {
+        let held: String = {
+            let Ok(mut held) = HELD_BACK.lock() else {
+                return typed_any;
+            };
+            if held.is_empty() {
+                HOLD_UNTIL_MS.store(0, Ordering::Relaxed);
+                return typed_any;
+            }
+            held.drain(..).collect()
+        };
+        type_text(&held);
+        typed_any = true;
+    }
+}
+
+/// Ends the hold and forgets what was held back.
+pub fn discard_hold() {
+    if let Ok(mut held) = HELD_BACK.lock() {
+        held.clear();
+        HOLD_UNTIL_MS.store(0, Ordering::Relaxed);
+    }
+}
+
+/// Keeps a typed character back while a hold is on. True if the key was kept
+/// and must not reach the app.
+unsafe fn hold_back(k: &KBDLLHOOKSTRUCT) -> bool {
+    if clock() >= HOLD_UNTIL_MS.load(Ordering::Relaxed) {
+        return false;
+    }
+    let Some(KeyEvent::Char(c)) = (unsafe { translate(k) }) else {
+        return false;
+    };
+    let Ok(mut held) = HELD_BACK.lock() else {
+        return false;
+    };
+    // Checked again under the lock: `finish_hold` ends the hold while holding it.
+    if clock() >= HOLD_UNTIL_MS.load(Ordering::Relaxed) || held.len() >= HOLD_LIMIT {
+        return false;
+    }
+    held.push(c);
+    true
+}
+
 /// Keys whose press Bloom swallowed, so their release is swallowed too.
 static SWALLOWED: [AtomicBool; 256] = [const { AtomicBool::new(false) }; 256];
 
@@ -115,9 +189,15 @@ unsafe extern "system" fn keyboard_proc(code: i32, wparam: WPARAM, lparam: LPARA
             let msg = wparam as u32;
             let down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
             if k.dwExtraInfo != BLOOM_TAG {
-                HELD[(k.vkCode & 0xFF) as usize].store(down, Ordering::Relaxed);
-                LAST_INPUT_MS.store(clock(), Ordering::Relaxed);
                 let index = (k.vkCode & 0xFF) as usize;
+                // While Bloom is typing, your characters wait their turn. They
+                // are not "input" for the settle check, as they never reach the app.
+                if down && hold_back(k) {
+                    SWALLOWED[index].store(true, Ordering::Relaxed);
+                    return 1;
+                }
+                HELD[index].store(down, Ordering::Relaxed);
+                LAST_INPUT_MS.store(clock(), Ordering::Relaxed);
                 if !down && SWALLOWED[index].swap(false, Ordering::Relaxed) {
                     return 1;
                 }

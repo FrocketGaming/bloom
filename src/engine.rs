@@ -182,9 +182,13 @@ fn expand(
     };
     let segs = template::resolve(&snippet.segs, &state.variables.read().unwrap());
 
+    // From here until the expansion is typed, what the user types waits its
+    // turn instead of landing in the middle of it. Keys that got through
+    // before the hold began are already on screen and are taken in below.
+    platform::begin_hold();
     platform::wait_for_typing_to_settle();
-    // Keys typed while Bloom waited are already on screen, after the trigger.
     if !absorb_late_keys(rx, &mut hit) {
+        platform::finish_hold();
         return;
     }
     platform::backspace(hit.delete);
@@ -209,6 +213,9 @@ fn expand(
             trailing: hit.trailing,
             restore: typed,
         });
+        // The palette takes the keyboard from here, so keys held back for the
+        // app they were aimed at are dropped rather than typed into the wrong place.
+        platform::discard_hold();
         palette::open(app, Some(snippet.id));
         return;
     }
@@ -216,14 +223,20 @@ fn expand(
     let rendered = template::render(&segs, &HashMap::new());
     deliver(state, &rendered.text, &hit.trailing, rendered.cursor_back);
     usage::record_use(state, &snippet);
-    remember_undo(
-        state,
-        &rendered.text,
-        &hit.trailing,
-        rendered.cursor_back,
-        typed,
-        usage::key_of(&snippet),
-    );
+    // Whatever the user typed meanwhile goes in after the expansion. Backspace
+    // could no longer take the expansion back cleanly, so it can't be undone.
+    if platform::finish_hold() {
+        *state.undo.lock().unwrap() = None;
+    } else {
+        remember_undo(
+            state,
+            &rendered.text,
+            &hit.trailing,
+            rendered.cursor_back,
+            typed,
+            usage::key_of(&snippet),
+        );
+    }
 }
 
 /// Takes in the keys typed between the trigger's last key and the moment Bloom
