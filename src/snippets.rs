@@ -247,7 +247,7 @@ const RESERVED_NAMES: [&str; 22] = [
 
 /// Turns what the user typed into a file name inside the snippets folder, or
 /// explains why it can't be one.
-fn safe_file_name(file: &str) -> Result<String> {
+pub fn safe_file_name(file: &str) -> Result<String> {
     let mut f = file.trim().to_string();
     if f.is_empty() {
         bail!("Choose a file for the snippet.");

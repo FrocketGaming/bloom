@@ -5,15 +5,19 @@ use crate::snippets::{self, SnippetEdit};
 use crate::state::AppState;
 use crate::template::{self, FieldSpec, Part};
 use crate::theme::{self, Palette, Preset, Theme};
+use crate::usage::Usage;
 use crate::variables::{self, Content, Variable};
-use crate::{engine, hotkey, matcher, palette, platform, startup, tray, usage};
+use crate::{
+    engine, files, hotkey, matcher, palette, platform, settings, startup, transfer, tray, usage,
+};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_dialog::{DialogExt, FileDialogBuilder};
 
 type S<'a> = State<'a, Arc<AppState>>;
 
@@ -281,18 +285,133 @@ pub fn save_settings(app: AppHandle, state: S, config: Config) -> Result<(), Str
         }
         return Err(e.to_string());
     }
+    adopt(&app, &state, &old, config);
+    Ok(())
+}
+
+/// Makes the running app follow settings that were just written to disk. The
+/// hotkey and the startup entry must already be dealt with.
+fn adopt(app: &AppHandle, state: &AppState, old: &Config, config: Config) {
     *state.config.write().unwrap() = config.clone();
     *state.config_error.write().unwrap() = None;
-    tray::set_hotkey(&app, &config.hotkey);
+    tray::set_hotkey(app, &config.hotkey);
     let look_changed = config.theme != old.theme
         || config.accent != old.accent
         || config.accent_color != old.accent_color;
     if look_changed {
-        set_window_theme(&app, config.theme);
+        set_window_theme(app, config.theme);
         // Every open window redraws itself in the new look.
         let _ = app.emit("theme-changed", ());
     }
-    Ok(())
+}
+
+/// A file dialog in front of the settings window.
+fn file_dialog(app: &AppHandle) -> FileDialogBuilder<tauri::Wry> {
+    let dialog = app
+        .dialog()
+        .file()
+        .add_filter("Bloom export", &[transfer::EXTENSION]);
+    match app.get_webview_window(settings::LABEL) {
+        Some(window) => dialog.set_parent(&window),
+        None => dialog,
+    }
+}
+
+/// Saves everything to a `.bloom` file the user picks. Returns where it went,
+/// or nothing if the user cancelled.
+#[tauri::command]
+pub async fn export_settings(app: AppHandle, state: S<'_>) -> Result<Option<String>, String> {
+    let name = format!(
+        "Bloom {}.{}",
+        chrono::Local::now().format("%Y-%m-%d"),
+        transfer::EXTENSION
+    );
+    let Some(picked) = file_dialog(&app)
+        .set_title("Export Bloom")
+        .set_file_name(name)
+        .blocking_save_file()
+    else {
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    // Recent uses still in memory belong in the export too.
+    usage::save_now(&state);
+    let text = transfer::collect(&state.paths)
+        .and_then(|bundle| transfer::to_text(&bundle))
+        .map_err(|e| format!("Couldn't gather your setup: {e}"))?;
+    files::write_atomic(&path, &text)
+        .map_err(|e| format!("Couldn't save {}: {e}", path.display()))?;
+    Ok(Some(path.display().to_string()))
+}
+
+#[derive(Serialize)]
+pub struct ImportReport {
+    snippet_files: usize,
+    snippets: usize,
+    /// The current setup as it was before, saved so the import can be undone.
+    backup: String,
+    /// Something that couldn't be brought across, though the rest was.
+    warning: Option<String>,
+}
+
+/// Replaces everything with a `.bloom` file the user picks, after backing up
+/// the current setup. Returns nothing if the user cancelled.
+#[tauri::command]
+pub async fn import_settings(app: AppHandle, state: S<'_>) -> Result<Option<ImportReport>, String> {
+    let Some(picked) = file_dialog(&app)
+        .set_title("Import Bloom")
+        .blocking_pick_file()
+    else {
+        return Ok(None);
+    };
+    let path = picked.into_path().map_err(|e| e.to_string())?;
+    let text = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Couldn't read {}: {e}", path.display()))?;
+    // Checked in full before anything on disk changes.
+    let bundle = transfer::parse(&text).map_err(|e| e.to_string())?;
+
+    usage::save_now(&state);
+    let backup = transfer::backup(&state.paths)
+        .map_err(|e| format!("Couldn't back up your current setup, so nothing was imported: {e}"))?
+        .display()
+        .to_string();
+    {
+        // Held so the usage saver can't write the old record over the new one.
+        let mut usage = state.usage.lock().unwrap();
+        transfer::write(&state.paths, &bundle).map_err(|e| {
+            format!("The import stopped partway: {e}. Your previous setup is saved in {backup}. Import that file to go back.")
+        })?;
+        *usage = Usage::load(&state.paths.usage_file);
+    }
+
+    let old = state.config.read().unwrap().clone();
+    let mut config = bundle.config().unwrap_or_else(|| old.clone());
+    // Whether Bloom starts with Windows belongs to this computer, not to the
+    // setup being brought over.
+    config.start_with_windows = old.start_with_windows;
+    let mut warning = None;
+    if config.hotkey != old.hotkey
+        && let Err(e) = hotkey::register(&app, &config.hotkey, Some(&old.hotkey))
+    {
+        warning = Some(format!("{e} Your search hotkey stays {}.", old.hotkey));
+        config.hotkey = old.hotkey.clone();
+    }
+    // Writes back what was adjusted above, keeping the imported file's comments.
+    if let Err(e) = config::save(&state.paths, &config) {
+        warning = Some(format!("Couldn't update bloom.toml: {e}"));
+    }
+    adopt(&app, &state, &old, config);
+
+    state.reload_snippets();
+    state.reload_variables();
+    let _ = app.emit("snippets-changed", ());
+    let _ = app.emit("variables-changed", ());
+    Ok(Some(ImportReport {
+        snippet_files: bundle.snippet_file_count(),
+        snippets: state.store.read().unwrap().snippets.len(),
+        backup,
+        warning,
+    }))
 }
 
 /// What a window needs to draw itself in the chosen look, and what the Settings

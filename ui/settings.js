@@ -847,6 +847,45 @@ $('threshold').addEventListener('change', () => {
   if (n > 0) saveConfig({ clipboard_threshold: n });
 });
 $('open-folder').addEventListener('click', () => invoke('open_snippets_folder'));
+
+// ---------- Export and import ----------
+
+async function exportAll() {
+  setStatus('transfer-status', '');
+  try {
+    const path = await invoke('export_settings');
+    if (path) setStatus('transfer-status', `Exported to ${path}`, 'ok');
+  } catch (e) {
+    setStatus('transfer-status', String(e), 'err');
+  }
+}
+
+async function importAll() {
+  setStatus('transfer-status', '');
+  const confirmed = await askConfirm({
+    title: 'Replace everything with an export?',
+    message: 'Your settings, snippets, variables and most-used record are replaced by the file you pick. Bloom saves the current ones in its backups folder first.',
+    confirm: 'Choose file…',
+    danger: true,
+  });
+  if (!confirmed) return;
+  try {
+    const report = await invoke('import_settings');
+    if (!report) return;
+    // Settings, variables and the look changed underneath this window.
+    await loadAll();
+    const files = report.snippet_files === 1 ? '1 file' : `${report.snippet_files} files`;
+    const count = report.snippets === 1 ? '1 snippet' : `${report.snippets} snippets`;
+    let msg = `Imported ${count} from ${files}. Your previous setup is saved in ${report.backup}`;
+    if (report.warning) msg += ` ${report.warning}`;
+    setStatus('transfer-status', msg, report.warning ? 'err' : 'ok');
+  } catch (e) {
+    setStatus('transfer-status', String(e), 'err');
+  }
+}
+
+$('export').addEventListener('click', exportAll);
+$('import').addEventListener('click', importAll);
 $('nav-settings').addEventListener('click', async () => { if (await confirmDiscard()) { dirty = false; varsDirty = false; reportUnsaved(); showView('general'); } });
 
 // Hotkey recorder
