@@ -29,9 +29,20 @@ function markClean() {
   updateDirty();
 }
 
+// Bloom closes this window for good (freeing its memory) when nothing is
+// unsaved, and only hides it otherwise. So it has to know when something is.
+let reportedUnsaved = false;
+function reportUnsaved() {
+  const unsaved = dirty || varsDirty;
+  if (unsaved === reportedUnsaved) return;
+  reportedUnsaved = unsaved;
+  invoke('set_settings_unsaved', { unsaved }).catch(() => { reportedUnsaved = !unsaved; });
+}
+
 /** Save is only active when the form differs from what's saved. */
 function updateDirty() {
   dirty = snapshot() !== savedSnapshot;
+  reportUnsaved();
   const btn = $('save');
   if (!btn.classList.contains('saved')) btn.disabled = !dirty;
   $('ed-unsaved').hidden = !dirty;
@@ -161,7 +172,7 @@ async function deleteFile(file) {
     return;
   }
   const wasOpen = Boolean(current && current.file === file);
-  if (wasOpen) { dirty = false; current = null; }
+  if (wasOpen) { dirty = false; current = null; reportUnsaved(); }
   await loadAll();
   if (wasOpen && view === 'editor') {
     if (snippets.length) openSnippet(snippets[0]); else await newSnippet();
@@ -356,6 +367,7 @@ async function remove() {
   try {
     await invoke('delete_snippet', { file: current.file, index: current.index });
     dirty = false;
+    reportUnsaved();
     await loadAll();
     if (snippets.length) openSnippet(snippets[0]); else newSnippet();
     setStatus('ed-status', 'Deleted.', 'ok');
@@ -472,6 +484,7 @@ function varsSnapshot() {
 
 function updateVarsDirty() {
   varsDirty = varsSnapshot() !== varsSaved;
+  reportUnsaved();
   $('vars-unsaved').hidden = !varsDirty;
   $('vars-save').disabled = !varsDirty;
   if (varsDirty) setStatus('vars-status', '');
@@ -624,6 +637,7 @@ async function saveVars() {
 async function openVariables() {
   if (!(await confirmDiscard())) return;
   dirty = false;
+  reportUnsaved();
   await loadVariables();
   setStatus('vars-status', '');
   showView('variables');
@@ -637,6 +651,7 @@ async function openSnippets() {
   if (!(await confirmDiscard())) return;
   dirty = false;
   varsDirty = false;
+  reportUnsaved();
   // Reload the snippet from what is saved, so a form left behind by a discarded
   // edit is not shown as if it were clean.
   const again = current && snippets.find((s) => s.id === current.id);
@@ -832,7 +847,7 @@ $('threshold').addEventListener('change', () => {
   if (n > 0) saveConfig({ clipboard_threshold: n });
 });
 $('open-folder').addEventListener('click', () => invoke('open_snippets_folder'));
-$('nav-settings').addEventListener('click', async () => { if (await confirmDiscard()) { dirty = false; varsDirty = false; showView('general'); } });
+$('nav-settings').addEventListener('click', async () => { if (await confirmDiscard()) { dirty = false; varsDirty = false; reportUnsaved(); showView('general'); } });
 
 // Hotkey recorder
 let recording = false;

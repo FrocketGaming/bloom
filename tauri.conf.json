@@ -42,17 +42,6 @@
         "focusable": false,
         "shadow": true,
         "windowEffects": { "effects": ["acrylic"] }
-      },
-      {
-        "label": "settings",
-        "title": "Bloom",
-        "url": "settings.html",
-        "width": 1000,
-        "height": 680,
-        "minWidth": 780,
-        "minHeight": 500,
-        "visible": false,
-        "center": true
       }
     ],
     "security": {

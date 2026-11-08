@@ -458,6 +458,13 @@ pub fn set_paused(app: AppHandle, state: S, paused: bool) {
     tray::sync_paused(&app, paused);
 }
 
+/// The settings window says whether it holds edits that aren't saved, which
+/// decides if closing it hides it or closes it.
+#[tauri::command]
+pub fn set_settings_unsaved(state: S, unsaved: bool) {
+    state.settings_unsaved.store(unsaved, Ordering::Relaxed);
+}
+
 fn after_change(app: &AppHandle, state: &AppState) {
     state.reload_snippets();
     let _ = app.emit("snippets-changed", ());

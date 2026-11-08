@@ -23,6 +23,9 @@ pub struct AppState {
     pub store: RwLock<Store>,
     pub variables: RwLock<Variables>,
     pub paused: AtomicBool,
+    /// The settings window holds edits that aren't saved yet. While it does,
+    /// closing it only hides it.
+    pub settings_unsaved: AtomicBool,
     /// The window that was active before the palette opened; text goes back there.
     pub prev_window: Mutex<Option<isize>>,
     pub pending_form: Mutex<Option<PendingForm>>,
