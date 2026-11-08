@@ -38,6 +38,18 @@ impl AppState {
         *self.store.write().unwrap() = store;
     }
 
+    /// Reloads only if the folder differs from what was last loaded. Saving in
+    /// Bloom reloads straight away, and the folder watcher then reports the
+    /// same write; this stops that second, identical reload. True if it reloaded.
+    pub fn reload_snippets_if_changed(&self) -> bool {
+        let now = crate::snippets::fingerprint(&self.paths.snippets_dir);
+        if self.store.read().unwrap().fingerprint == now {
+            return false;
+        }
+        self.reload_snippets();
+        true
+    }
+
     pub fn reload_variables(&self) {
         let variables = Variables::load(&self.paths.variables_file);
         *self.variables.write().unwrap() = variables;

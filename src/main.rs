@@ -94,8 +94,9 @@ fn main() {
             let watch_handle = handle.clone();
             let watch_state = state.clone();
             if let Err(e) = snippets::watch(&state.paths.snippets_dir, move || {
-                watch_state.reload_snippets();
-                let _ = watch_handle.emit("snippets-changed", ());
+                if watch_state.reload_snippets_if_changed() {
+                    let _ = watch_handle.emit("snippets-changed", ());
+                }
             }) {
                 eprintln!("bloom: not watching snippet files: {e}");
             }

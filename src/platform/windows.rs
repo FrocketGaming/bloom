@@ -1,4 +1,5 @@
 use crate::matcher::{KeyEvent, Nav};
+use std::borrow::Cow;
 use std::mem::{size_of, zeroed};
 use std::ptr::{null, null_mut};
 use std::sync::OnceLock;
@@ -227,9 +228,10 @@ unsafe fn translate(k: &KBDLLHOOKSTRUCT) -> Option<KeyEvent> {
             n if n < 0 => None,         // dead key, wait for the next one
             0 => Some(KeyEvent::Reset), // arrows, Home, F-keys, Esc…
             n => {
-                let s = String::from_utf16_lossy(&buf[..n as usize]);
-                match s.chars().last() {
-                    Some(c) if !c.is_control() => Some(KeyEvent::Char(c)),
+                // Decoded in place: this runs inside the keyboard hook, which
+                // Windows cuts off if it is slow, so it must not allocate.
+                match char::decode_utf16(buf[..n as usize].iter().copied()).last() {
+                    Some(Ok(c)) if !c.is_control() => Some(KeyEvent::Char(c)),
                     _ => Some(KeyEvent::Reset),
                 }
             }
@@ -389,8 +391,9 @@ pub fn type_text(text: &str) {
     // Caps Lock flips letters typed as keys, so flip Shift back for them.
     let caps = unsafe { GetKeyState(VK_CAPITAL as i32) & 1 != 0 };
     let mut first = true;
+    let mut v = Vec::with_capacity(6);
     for ch in text.chars() {
-        let mut v = Vec::with_capacity(6);
+        v.clear();
         match ch {
             '\r' => continue,
             '\n' => {
@@ -505,7 +508,7 @@ pub fn paste_text(text: &str) {
     // Only press Ctrl+V once the clipboard really holds the snippet; a sync
     // tool can grab the clipboard between our write and the paste.
     let ready = retry(|| {
-        clip.set_text(pasteable.clone()).ok()?;
+        clip.set_text(pasteable.as_str()).ok()?;
         let now = clip.get_text().ok()?;
         same_text(&now, &pasteable).then_some(())
     });
@@ -543,10 +546,19 @@ pub fn paste_text(text: &str) {
         }
         match previous {
             Previous::Text(t) => {
-                retry(|| clip.set_text(t.clone()).ok());
+                retry(|| clip.set_text(t.as_str()).ok());
             }
             Previous::Image(img) => {
-                retry(|| clip.set_image(img.clone()).ok());
+                // Borrowed on each attempt: a screenshot can be tens of
+                // megabytes, and a retry must not copy it again.
+                retry(|| {
+                    clip.set_image(arboard::ImageData {
+                        width: img.width,
+                        height: img.height,
+                        bytes: Cow::Borrowed(&img.bytes),
+                    })
+                    .ok()
+                });
             }
             // The clipboard was empty or held something Bloom can't copy
             // (files, rich formats). Leave the snippet rather than wipe it.
