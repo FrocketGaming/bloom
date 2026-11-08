@@ -96,7 +96,7 @@ mark { background: none; color: var(--accent); font-weight: 600; }
 .prev-body { font: 13.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; margin: 0; max-height: 92px; overflow: hidden; }
 /* Room for four lines in the search view, so the window keeps almost the same
    height while the highlight moves between short and long previews. */
-#prev .prev-body { min-height: 84px; }
+#prev .prev-body { min-height: 84px; max-height: 200px; overflow-y: auto; scrollbar-width: thin; }
 .var { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
 .field { border-bottom: 1.5px dashed var(--accent); color: var(--accent); }
 .field.filled { border-bottom-style: solid; }
