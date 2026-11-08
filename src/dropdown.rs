@@ -17,7 +17,7 @@ pub const LABEL: &str = "dropdown";
 /// Most rows shown at once.
 const MAX_ROWS: usize = 6;
 /// Window width in logical pixels.
-const WIDTH: f64 = 300.0;
+const WIDTH: f64 = 360.0;
 /// Logical pixels for one row, the list's padding, and the preview strip.
 const ROW_HEIGHT: f64 = 37.0;
 const LIST_PADDING: f64 = 12.0;

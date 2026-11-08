@@ -3,4 +3,8 @@
 .list { max-height: none; overflow: hidden; }
 .row { gap: 10px; padding: 8px 10px; }
 .prev { padding: 10px 14px 12px; }
-.prev-body { font-size: 12.5px; line-height: 1.5; max-height: 38px; }
+/* palette.css gives #prev .prev-body a four-line min-height for the search
+   view. Without this reset it beats the two-line cap, the content outgrows the
+   window, and the list scrolls out of sight behind an empty bar. */
+#prev .prev-body { font-size: 12.5px; line-height: 1.5; min-height: 0; max-height: 38px; }
+.pal { overflow: hidden; }
