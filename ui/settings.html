@@ -180,6 +180,15 @@
           <div class="inline"><code id="folder"></code><button id="open-folder" class="btn" type="button">Open folder</button></div>
           <p class="hint">Snippets are plain TOML files. Edit them in any editor and Bloom reloads them when you save.</p>
         </div>
+        <div class="fld">
+          <span>Move to another computer</span>
+          <div class="inline">
+            <button id="export" class="btn" type="button">Export…</button>
+            <button id="import" class="btn" type="button">Import…</button>
+          </div>
+          <p class="hint">Export saves your settings, snippets, variables and most-used record in one <code>.bloom</code> file. Import it on the other computer to replace what is there. Bloom first saves the setup it replaces in a <code>backups</code> folder, so you can import that file to go back. Start with Windows stays as each computer has it.</p>
+          <p class="status" id="transfer-status" role="status"></p>
+        </div>
         <p class="status" id="gen-status" role="status"></p>
       </div>
     </section>

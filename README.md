@@ -159,6 +159,16 @@ Open **Settings** in the Bloom window and use **Appearance** and **Accent color*
 - **Custom colors** are picked with the color picker or typed as a hex code such as `#3b82f6`. A color that looks fine on a light background is often unreadable on a dark one, so Bloom nudges its lightness for each theme until text in it has enough contrast, and picks white or dark text for the labels on filled buttons. The page shows the colors it will really use. A color that needs no change is used exactly as picked.
 - **In `bloom.toml`:** `theme = "system"`, `"light"` or `"dark"`; `accent = "pink"`, `"blue"`, `"green"`, `"purple"`, `"orange"`, `"teal"` or `"custom"`; and `accent_color = "#3b82f6"` for the custom color.
 
+## Moving to another computer
+
+Open **Settings** in the Bloom window and use **Export…** under **Move to another computer**. It saves your settings, every snippet file, your variables and the most-used record in one `.bloom` file. On the other computer, choose **Import…** and pick that file.
+
+- **Import replaces** what the other computer has: settings, snippets, variables and the most-used record. Snippet files that aren't in the export are removed.
+- **Nothing is lost.** Before importing, Bloom saves the current setup as a `.bloom` file in `%APPDATA%\Bloom\backups`. Import that file to go back.
+- **Start with Windows** stays as each computer has it.
+- **Comments and formatting** in your files come across unchanged. The export is a plain TOML file you can open in any editor.
+- **If the search hotkey** is taken by another app on the new computer, Bloom keeps the one it had and says so.
+
 ## Using two computers (Mouse Without Borders)
 
 Bloom only reacts to keys that actually reach an app on the PC it runs on. With [Mouse Without Borders](https://learn.microsoft.com/windows/powertoys/mouse-without-borders) sharing one keyboard between PCs:

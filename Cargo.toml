@@ -16,6 +16,7 @@ dirs = "7.0.0"
 notify-debouncer-mini = "0.7.0"
 serde = { version = "1.0.229", features = ["derive"] }
 tauri = { version = "2.12.5", features = ["tray-icon"] }
+tauri-plugin-dialog = "2.7.3"
 tauri-plugin-global-shortcut = "2.4.1"
 tauri-plugin-single-instance = "2.5.5"
 toml = "1.2.1"

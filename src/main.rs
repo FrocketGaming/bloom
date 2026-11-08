@@ -16,6 +16,7 @@ mod startup;
 mod state;
 mod template;
 mod theme;
+mod transfer;
 mod tray;
 mod undo;
 mod usage;
@@ -56,6 +57,7 @@ fn main() {
             settings::show(app)
         }))
         .plugin(hotkey::plugin())
+        .plugin(tauri_plugin_dialog::init())
         .manage(state.clone())
         .invoke_handler(tauri::generate_handler![
             commands::list_snippets,
@@ -76,6 +78,8 @@ fn main() {
             commands::open_snippets_folder,
             commands::list_variables,
             commands::save_variables,
+            commands::export_settings,
+            commands::import_settings,
         ])
         .setup(move |app| {
             let handle = app.handle().clone();
