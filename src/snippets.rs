@@ -1,5 +1,6 @@
 //! Loading, saving and watching the snippet files in the snippets folder.
 
+use crate::template::{self, Seg};
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
@@ -8,7 +9,6 @@ use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use crate::template::{self, Seg};
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value};
 
 #[derive(Deserialize, Default)]

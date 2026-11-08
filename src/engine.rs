@@ -58,7 +58,15 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
                     continue;
                 }
                 if let KeyEvent::Nav(nav) = ev {
-                    handle_nav(&app, &state, &rx, &mut matcher, &mut menu, &mut dismissed, nav);
+                    handle_nav(
+                        &app,
+                        &state,
+                        &rx,
+                        &mut matcher,
+                        &mut menu,
+                        &mut dismissed,
+                        nav,
+                    );
                     continue;
                 }
                 let triggers = state.store.read().unwrap().triggers.clone();
