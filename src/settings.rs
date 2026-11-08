@@ -10,6 +10,13 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder}
 
 pub const LABEL: &str = "settings";
 
+/// WebView2 needs every window to use the same browser arguments, so this must
+/// match `additionalBrowserArgs` in tauri.conf.json. Software rendering is
+/// enough for Bloom's plain panels, and it spares the GPU process, which
+/// otherwise held about 100 MB.
+const BROWSER_ARGS: &str =
+    "--disable-gpu --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+
 /// Shows the settings window, building it first if it isn't open.
 pub fn show(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(LABEL) {
@@ -29,6 +36,7 @@ pub fn show(app: &AppHandle) {
 fn build(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let w = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("settings.html".into()))
         .title("Bloom")
+        .additional_browser_args(BROWSER_ARGS)
         .inner_size(1000.0, 680.0)
         .min_inner_size(780.0, 500.0)
         .center()

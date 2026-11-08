@@ -24,7 +24,8 @@
         "focus": true,
         "center": true,
         "shadow": true,
-        "windowEffects": { "effects": ["acrylic"] }
+        "windowEffects": { "effects": ["acrylic"] },
+        "additionalBrowserArgs": "--disable-gpu --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
       },
       {
         "label": "dropdown",
@@ -41,7 +42,8 @@
         "focus": false,
         "focusable": false,
         "shadow": true,
-        "windowEffects": { "effects": ["acrylic"] }
+        "windowEffects": { "effects": ["acrylic"] },
+        "additionalBrowserArgs": "--disable-gpu --disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection"
       }
     ],
     "security": {
