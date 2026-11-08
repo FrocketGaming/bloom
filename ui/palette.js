@@ -70,7 +70,12 @@ function fit() {
   requestAnimationFrame(() => {
     // Measure the content, not the box: once the palette reaches the screen
     // height it scrolls, and its box stops tracking what it holds.
-    const h = Math.ceil($('pal').scrollHeight);
+    // scrollHeight rounds to a whole pixel, and a form's rows can add up to a
+    // fraction more than that. The window is then a hair too short and an
+    // outer scrollbar appears, so round the real height up instead.
+    const content = Array.from($('pal').children)
+      .reduce((sum, el) => sum + el.getBoundingClientRect().height, 0);
+    const h = Math.ceil(Math.max($('pal').scrollHeight, content));
     // Resizing the window can re-enter here; only ask the backend when the
     // height actually changed.
     if (h === lastHeight) return;
