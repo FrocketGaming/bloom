@@ -203,8 +203,7 @@ fn render(app: &AppHandle, state: &AppState, menu: &Menu) {
         rows.push(Row {
             trigger: snippet.trigger.clone().unwrap_or_default(),
             name: snippet.name.clone(),
-            form: !template::fields(&template::parse_resolved(&snippet.body, &variables))
-                .is_empty(),
+            form: template::needs_form(&snippet.segs, &variables),
         });
     }
     drop(store);

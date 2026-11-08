@@ -58,6 +58,7 @@ fn main() {
         .manage(state.clone())
         .invoke_handler(tauri::generate_handler![
             commands::list_snippets,
+            commands::preview_snippet,
             commands::preview_body,
             commands::insert_snippet,
             commands::hide_palette,

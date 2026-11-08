@@ -2,12 +2,13 @@
 
 use anyhow::{Context, Result, anyhow, bail};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::Path;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
+use crate::template::{self, Seg};
 use toml_edit::{ArrayOfTables, DocumentMut, Item, Table, Value};
 
 #[derive(Deserialize, Default)]
@@ -41,6 +42,10 @@ pub struct Snippet {
     pub name: String,
     pub body: String,
     pub word: bool,
+    /// The body parsed once at load, so no caller has to parse it again. Variables
+    /// are not looked up yet; see `template::resolve`.
+    #[serde(skip)]
+    pub segs: Arc<Vec<Seg>>,
 }
 
 /// A trigger prepared for the matcher.
@@ -55,6 +60,8 @@ pub struct Trigger {
 pub struct Store {
     pub snippets: Vec<Snippet>,
     pub triggers: Arc<Vec<Trigger>>,
+    /// Snippet id -> position in `snippets`.
+    index: HashMap<String, usize>,
     pub errors: Vec<String>,
     pub files: Vec<String>,
 }
@@ -103,6 +110,7 @@ impl Store {
                     .filter(|n| !n.trim().is_empty())
                     .or_else(|| trigger.clone())
                     .unwrap_or_else(|| first_line(&raw.body));
+                let body = raw.body.replace("\r\n", "\n");
                 store.snippets.push(Snippet {
                     id: format!("{file}#{index}"),
                     file: file.clone(),
@@ -110,7 +118,8 @@ impl Store {
                     group: group.clone(),
                     trigger,
                     name,
-                    body: raw.body.replace("\r\n", "\n"),
+                    segs: Arc::new(template::parse(&body)),
+                    body,
                     word: raw.word,
                 });
             }
@@ -129,6 +138,12 @@ impl Store {
                 })
                 .collect(),
         );
+        store.index = store
+            .snippets
+            .iter()
+            .enumerate()
+            .map(|(position, s)| (s.id.clone(), position))
+            .collect();
         // Hand-edited files can repeat a trigger. The matcher keeps the last
         // match, so say so instead of letting a snippet quietly never fire.
         let mut seen = HashSet::new();
@@ -147,7 +162,7 @@ impl Store {
     }
 
     pub fn get(&self, id: &str) -> Option<&Snippet> {
-        self.snippets.iter().find(|s| s.id == id)
+        self.index.get(id).map(|&position| &self.snippets[position])
     }
 }
 

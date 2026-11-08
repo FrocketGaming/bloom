@@ -27,10 +27,9 @@ pub struct SnippetView {
     name: String,
     body: String,
     word: bool,
-    preview: Vec<Part>,
+    /// What the form asks for. Empty for a snippet that inserts straight away.
+    /// The preview is not sent here: see `preview_snippet`.
     fields: Vec<FieldSpec>,
-    /// `{{var:name}}` names in the body that no variable has.
-    missing: Vec<String>,
     /// How much the snippet is used, for the search window to order by. Zero
     /// when ranking is off.
     usage: f64,
@@ -43,23 +42,10 @@ pub fn list_snippets(state: S) -> Vec<SnippetView> {
     let ranked = usage::enabled(&state);
     let usage = state.usage.lock().unwrap();
     let now = usage::now();
-    // Every body is parsed once, and the clipboard is read at most once rather
-    // than once per snippet that uses {{clipboard}}.
-    let parsed: Vec<Vec<template::Seg>> = store
-        .snippets
-        .iter()
-        .map(|s| template::parse_resolved(&s.body, &variables))
-        .collect();
-    let clipboard = parsed
-        .iter()
-        .any(|segs| template::uses_clipboard(segs))
-        .then(template::read_clipboard)
-        .flatten();
     store
         .snippets
         .iter()
-        .zip(parsed)
-        .map(|(s, segs)| SnippetView {
+        .map(|s| SnippetView {
             id: s.id.clone(),
             file: s.file.clone(),
             index: s.index,
@@ -68,9 +54,13 @@ pub fn list_snippets(state: S) -> Vec<SnippetView> {
             name: s.name.clone(),
             body: s.body.clone(),
             word: s.word,
-            preview: template::preview(&segs, clipboard.as_deref()),
-            fields: template::fields(&segs),
-            missing: template::missing(&segs),
+            // Bodies are parsed once, when the snippets load. Only those that
+            // ask for a form are resolved here.
+            fields: if template::needs_form(&s.segs, &variables) {
+                template::fields(&template::resolve(&s.segs, &variables))
+            } else {
+                Vec::new()
+            },
             usage: if ranked {
                 usage.score(&usage::key_of(s), now)
             } else {
@@ -78,6 +68,22 @@ pub fn list_snippets(state: S) -> Vec<SnippetView> {
             },
         })
         .collect()
+}
+
+/// What inserting a snippet will type, for the search window to show. Asked for
+/// one snippet at a time, as it is highlighted, so opening the window neither
+/// builds a preview of every snippet nor opens the clipboard.
+#[tauri::command]
+pub fn preview_snippet(state: S, id: String) -> Vec<Part> {
+    let store = state.store.read().unwrap();
+    let Some(snippet) = store.get(&id) else {
+        return Vec::new();
+    };
+    let segs = template::resolve(&snippet.segs, &state.variables.read().unwrap());
+    let clipboard = template::uses_clipboard(&segs)
+        .then(template::read_clipboard)
+        .flatten();
+    template::preview(&segs, clipboard.as_deref())
 }
 
 #[derive(Serialize)]
@@ -121,7 +127,7 @@ pub fn insert_snippet(
         .get(&id)
         .cloned()
         .ok_or("This snippet was changed or removed. Search again.")?;
-    let segs = template::parse_resolved(&snippet.body, &state.variables.read().unwrap());
+    let segs = template::resolve(&snippet.segs, &state.variables.read().unwrap());
     let fields = template::fields(&segs);
     if !fields.is_empty() && values.is_none() {
         return Ok(InsertResult::NeedsForm { fields });
@@ -205,8 +211,7 @@ pub fn get_settings(state: S) -> SettingsView {
     {
         let variables = state.variables.read().unwrap();
         for snippet in &store.snippets {
-            let segs = template::parse_resolved(&snippet.body, &variables);
-            let missing = template::missing(&segs);
+            let missing = template::missing_in(&snippet.segs, &variables);
             if !missing.is_empty() {
                 let names: Vec<String> =
                     missing.iter().map(|n| format!("{{{{var:{n}}}}}")).collect();
@@ -369,7 +374,7 @@ pub fn list_variables(state: S) -> VariablesView {
     // Lower-cased name -> (name as first typed, snippets using it).
     let mut uses: HashMap<String, (String, usize)> = HashMap::new();
     for snippet in &store.snippets {
-        for name in template::variable_names(&template::parse(&snippet.body)) {
+        for name in template::variable_names(&snippet.segs) {
             uses.entry(name.to_lowercase()).or_insert((name, 0)).1 += 1;
         }
     }
