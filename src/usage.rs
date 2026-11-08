@@ -159,9 +159,12 @@ impl Usage {
     /// Orders `items` with the most used first. Items with equal scores, which
     /// includes everything never used, keep the order they came in.
     pub fn rank<T>(&self, items: &mut [T], now: u64, key_of: impl Fn(&T) -> String) {
-        items.sort_by(|a, b| {
-            self.score(&key_of(b), now)
-                .total_cmp(&self.score(&key_of(a), now))
+        // Each item's key and score are worked out once, not on every
+        // comparison. Scores are never negative, so their bits sort the same
+        // way the numbers do. The sort is stable, which keeps ties in order.
+        items.sort_by_cached_key(|item| {
+            let score = self.score(&key_of(item), now);
+            std::cmp::Reverse(if score > 0.0 { score.to_bits() } else { 0 })
         });
     }
 

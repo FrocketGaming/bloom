@@ -9,6 +9,7 @@
 //!
 //! When none answer, the caller falls back to the search palette.
 
+use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::mem::size_of;
 use std::thread;
@@ -52,11 +53,7 @@ pub struct CaretPosition {
 
 /// Where the caret is, or `None` if the focused app won't say.
 pub fn caret_position() -> Option<CaretPosition> {
-    // UI Automation and MSAA need COM on the calling thread. Ignore the
-    // result: an already-initialised thread reports it harmlessly.
-    unsafe {
-        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
-    }
+    init_com_once();
 
     let (focus, thread_info) = focus_window()?;
     let found = win32_caret(&thread_info)
@@ -73,6 +70,44 @@ pub fn caret_position() -> Option<CaretPosition> {
             source,
         })
     })
+}
+
+thread_local! {
+    static COM_READY: Cell<bool> = const { Cell::new(false) };
+    /// The UI Automation client, kept for the life of the thread. Creating one
+    /// loads the whole UI Automation stack, which is far too slow to repeat
+    /// each time the suggestion list opens.
+    static AUTOMATION: RefCell<Option<IUIAutomation>> = const { RefCell::new(None) };
+}
+
+/// UI Automation and MSAA need COM on the calling thread. Done once per thread.
+fn init_com_once() {
+    COM_READY.with(|ready| {
+        if !ready.get() {
+            // Ignore the result: an already-initialised thread reports it harmlessly.
+            unsafe {
+                let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+            }
+            ready.set(true);
+        }
+    });
+}
+
+/// This thread's UI Automation client, created on first use.
+fn automation() -> Option<IUIAutomation> {
+    AUTOMATION.with(|slot| {
+        let mut slot = slot.borrow_mut();
+        if slot.is_none() {
+            *slot = unsafe { CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER) }.ok();
+        }
+        slot.clone()
+    })
+}
+
+/// Drops the kept client, so the next lookup makes a fresh one. Used when it
+/// stops answering (for instance after Explorer restarts).
+fn forget_automation() {
+    AUTOMATION.with(|slot| *slot.borrow_mut() = None);
 }
 
 /// Rejects empty rectangles and ones that sit outside every monitor, which
@@ -147,10 +182,12 @@ fn win32_caret(info: &GUITHREADINFO) -> Option<RECT> {
 
 /// Source 2: the focused element's text caret through UI Automation.
 fn uia_caret() -> Option<RECT> {
+    let automation = automation()?;
     unsafe {
-        let automation: IUIAutomation =
-            CoCreateInstance(&CUIAutomation, None, CLSCTX_INPROC_SERVER).ok()?;
-        let element = automation.GetFocusedElement().ok()?;
+        let Ok(element) = automation.GetFocusedElement() else {
+            forget_automation();
+            return None;
+        };
         let pattern: IUIAutomationTextPattern2 =
             element.GetCurrentPatternAs(UIA_TextPattern2Id).ok()?;
         let mut active = Default::default();

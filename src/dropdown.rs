@@ -134,13 +134,20 @@ pub fn open(
         _ => 0,
     };
 
+    // Typing on towards the same list changes nothing the user can see. Skip
+    // redrawing and repositioning the window then; it runs on every key.
+    let unchanged = previous
+        .as_ref()
+        .is_some_and(|menu| menu.ids == ids && menu.selected == selected);
     let menu = Menu {
         ids,
         selected,
         typed: suggestion.text,
         caret,
     };
-    render(app, state, &menu);
+    if !unchanged {
+        render(app, state, &menu);
+    }
     platform::set_list_keys(true);
     Some(menu)
 }
