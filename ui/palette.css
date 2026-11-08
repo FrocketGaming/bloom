@@ -74,7 +74,7 @@ kbd {
 }
 
 /* Results */
-.list { padding: 6px; max-height: 300px; overflow-y: auto; scrollbar-width: thin; }
+.list { padding: 6px; max-height: 300px; overflow-y: auto; }
 .row { display: flex; align-items: center; gap: 12px; padding: 9px 12px; border-radius: 9px; cursor: default; min-width: 0; }
 .row.sel { background: var(--sel); }
 .row .name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; }
@@ -96,7 +96,8 @@ mark { background: none; color: var(--accent); font-weight: 600; }
 .prev-body { font: 13.5px/1.55 var(--mono); white-space: pre-wrap; word-break: break-word; margin: 0; max-height: 92px; overflow: hidden; }
 /* Room for four lines in the search view, so the window keeps almost the same
    height while the highlight moves between short and long previews. */
-#prev .prev-body { min-height: 84px; max-height: 200px; overflow-y: auto; scrollbar-width: thin; }
+#prev { max-height: 240px; overflow-y: auto; }
+#prev .prev-body { min-height: 84px; max-height: none; overflow: visible; }
 .var { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; }
 .field { border-bottom: 1.5px dashed var(--accent); color: var(--accent); }
 .field.filled { border-bottom-style: solid; }
@@ -116,7 +117,8 @@ mark { background: none; color: var(--accent); font-weight: 600; }
 .fields input:focus, .fields select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 /* A long snippet scrolls inside the preview, so the fields and the Insert hint
    stay in view. The window grows with it, up to this cap. */
-.form-prev .prev-body { max-height: 320px; overflow-y: auto; scrollbar-width: thin; }
+.form-prev { max-height: 360px; overflow-y: auto; }
+.form-prev .prev-body { max-height: none; overflow: visible; }
 .foot { display: flex; gap: 16px; align-items: center; padding: 9px 18px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--muted); }
 .foot span { display: inline-flex; gap: 6px; align-items: center; }
 .foot .r { margin-left: auto; }
@@ -145,3 +147,14 @@ select option { background-color: var(--pop); color: var(--ink); }
   select option:focus-visible { outline: none; }
   select::picker-icon { color: var(--muted); font-size: .8em; }
 }
+
+/* Scrollbars: drawn here rather than left native, so the track has no arrows
+   and matches the editor in the settings window. These are flush with the
+   window edge, which Windows rounds, so the track needs no radius of its own. */
+.pal::-webkit-scrollbar, .list::-webkit-scrollbar, #prev::-webkit-scrollbar, .form-prev::-webkit-scrollbar { width: 12px; }
+.pal::-webkit-scrollbar-track, .list::-webkit-scrollbar-track, #prev::-webkit-scrollbar-track, .form-prev::-webkit-scrollbar-track { background: var(--chip); }
+.pal::-webkit-scrollbar-thumb, .list::-webkit-scrollbar-thumb, #prev::-webkit-scrollbar-thumb, .form-prev::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 60%, transparent); background-clip: padding-box;
+  border: 3px solid transparent; border-radius: 6px;
+}
+.pal::-webkit-scrollbar-thumb:hover, .list::-webkit-scrollbar-thumb:hover, #prev::-webkit-scrollbar-thumb:hover, .form-prev::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }

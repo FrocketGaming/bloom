@@ -266,3 +266,10 @@ textarea::-webkit-scrollbar-thumb, .preview::-webkit-scrollbar-thumb {
 }
 textarea::-webkit-scrollbar-thumb:hover, .preview::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }
 textarea::-webkit-scrollbar-corner, .preview::-webkit-scrollbar-corner { background: transparent; }
+.tree::-webkit-scrollbar, .main::-webkit-scrollbar { width: 12px; }
+.tree::-webkit-scrollbar-track, .main::-webkit-scrollbar-track { background: transparent; }
+.tree::-webkit-scrollbar-thumb, .main::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 60%, transparent); background-clip: padding-box;
+  border: 3px solid transparent; border-radius: 6px;
+}
+.tree::-webkit-scrollbar-thumb:hover, .main::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }
