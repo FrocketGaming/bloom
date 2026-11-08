@@ -32,6 +32,32 @@ expansion and then types quickly, and confirm it fails on the current code.
 expansion fix typed a trigger, then a space 40 ms later, and compared the
 result with the expected text.
 
+## Make the icon follow the accent color
+
+Wanted: the icon should match the accent color chosen in Settings, instead of
+always being its one fixed color.
+
+Where it stands: the icon is a fixed set of files in `icons/`. The tray uses
+the app's default window icon (`src/tray.rs`), the windows use the same one,
+and the installer and the exe embed `icons/icon.ico` when they are built. The
+accent is a runtime setting with presets and a custom color (`src/theme.rs`).
+
+What is possible, roughly in order of effort:
+
+- Tint the tray icon and the window icons at runtime. When the accent changes,
+  recolor the icon image in memory and apply it with the tray's `set_icon` and
+  each window's `set_icon`. Bloom already sends a `theme-changed` event when
+  the look changes, so that is the hook. The icon needs a flat shape, or a
+  separate mask, so that only the accent-colored part gets recolored.
+- The exe, the installer and the Start menu shortcut cannot change at runtime,
+  because Windows reads them from the file. They would stay at the default
+  color unless a build is made per accent, which is not worth it.
+- The taskbar icon of a running window follows `set_icon`, so it would match;
+  a pinned shortcut would not.
+
+Open question: whether the default (current) accent should keep today's exact
+icon colors, so nothing changes for anyone who never touches the setting.
+
 ## Smaller follow-ups
 
 - Caret lookup runs on the engine thread. Opening the suggestion list asks the
