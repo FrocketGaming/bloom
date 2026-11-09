@@ -36,6 +36,12 @@ pub fn show(app: &AppHandle) {
 fn build(app: &AppHandle) -> tauri::Result<WebviewWindow> {
     let w = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App("settings.html".into()))
         .title("Bloom")
+        // Bloom draws its own title bar (ui/titlebar.js) so the window looks the
+        // same whatever accent colour Windows puts on title bars. The shadow
+        // keeps the Windows 11 rounded corners and drop shadow, and the window
+        // still resizes from its edges.
+        .decorations(false)
+        .shadow(true)
         .additional_browser_args(BROWSER_ARGS)
         .inner_size(1000.0, 680.0)
         .min_inner_size(780.0, 500.0)
