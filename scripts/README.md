@@ -7,6 +7,7 @@ the keyboard and mouse alone while they run.
 | Script | What it does |
 | --- | --- |
 | `smoke.ps1` | Types a few triggers into a text box and shows what they became. |
+| `undo-test.ps1` | Undoes an expansion with Backspace, then types right away. Every row should pass. |
 | `password-test.ps1` | Types `;date ` into a normal box and a password box. It should expand only in the normal box. |
 | `browser-load.ps1` | Measures Chrome and Edge CPU and memory over 15 seconds. |
 | `crop.ps1 -Out shot.png [-Title name]` | Screenshots one window. |
