@@ -7,12 +7,21 @@
 <script src="theme.js"></script>
 </head>
 <body>
+<!-- Bloom draws its own title bar, so the window looks the same whatever
+     colours Windows is set to use for title bars. -->
+<header class="titlebar" data-tauri-drag-region>
+  <div class="tb-brand" data-tauri-drag-region>
+    <svg viewBox="0 0 40 40" aria-hidden="true"><g fill="var(--accent)"><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5"/><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5" transform="rotate(72 20 20)"/><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5" transform="rotate(144 20 20)"/><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5" transform="rotate(216 20 20)"/><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5" transform="rotate(288 20 20)"/></g><circle cx="20" cy="20" r="4.2" fill="var(--side)"/></svg>
+    <span>Bloom</span>
+  </div>
+  <div class="tb-buttons">
+    <button id="tb-min" class="tb-btn" type="button" tabindex="-1" title="Minimize" aria-label="Minimize">&#xE921;</button>
+    <button id="tb-max" class="tb-btn" type="button" tabindex="-1" title="Maximize" aria-label="Maximize">&#xE922;</button>
+    <button id="tb-close" class="tb-btn tb-close" type="button" tabindex="-1" title="Close" aria-label="Close">&#xE8BB;</button>
+  </div>
+</header>
 <div class="app">
   <aside class="side">
-    <div class="brand">
-      <svg viewBox="0 0 40 40" aria-hidden="true"><g fill="var(--accent)"><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5"/><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5" transform="rotate(72 20 20)"/><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5" transform="rotate(144 20 20)"/><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5" transform="rotate(216 20 20)"/><ellipse cx="20" cy="10.5" rx="5.6" ry="8.5" transform="rotate(288 20 20)"/></g><circle cx="20" cy="20" r="4.2" fill="var(--side)"/></svg>
-      <span>Bloom</span>
-    </div>
     <div class="side-tools">
       <input id="filter" type="search" placeholder="Filter snippets" aria-label="Filter snippets" autocomplete="off">
       <button id="new" class="btn primary" type="button" title="New snippet (Ctrl+N)">New</button>
@@ -207,6 +216,7 @@
     </div>
   </form>
 </dialog>
+<script src="titlebar.js"></script>
 <script src="settings.js"></script>
 </body>
 </html>

@@ -47,13 +47,33 @@ body { background: var(--bg); color: var(--ink); font: 14px/1.5 var(--ui); }
 button { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-.app { display: grid; grid-template-columns: 270px minmax(0, 1fr); height: 100%; }
+body { display: flex; flex-direction: column; }
+
+/* Title bar. Windows' own is turned off so it can't pick up the system accent
+   colour; this one follows Bloom's theme. The left part continues the sidebar. */
+.titlebar { flex: none; display: flex; height: 38px; background: var(--bg); user-select: none; -webkit-user-select: none; }
+.tb-brand {
+  width: 270px; flex: none; display: flex; align-items: center; gap: 9px; padding: 0 14px;
+  background: var(--side); border-right: 1px solid var(--line); font: 600 14px/1 var(--display);
+}
+.tb-brand > * { pointer-events: none; } /* clicks fall through to the drag region */
+.tb-brand svg { width: 18px; height: 18px; }
+.titlebar.inactive .tb-brand span, .titlebar.inactive .tb-btn { color: var(--muted); }
+.tb-buttons { margin-left: auto; display: flex; }
+.tb-btn {
+  width: 46px; height: 100%; border: 0; background: none; cursor: default; padding: 0;
+  font: 10px/1 "Segoe Fluent Icons", "Segoe MDL2 Assets"; color: var(--ink);
+}
+.tb-btn:hover { background: var(--chip); }
+.tb-btn:active { background: var(--line); }
+.tb-close:hover, .tb-close:active { background: #c42b1c; color: #ffffff; }
+.tb-close:active { background: #c63d30; }
+
+.app { flex: 1; min-height: 0; display: grid; grid-template-columns: 270px minmax(0, 1fr); }
 
 /* Sidebar */
 .side { background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
-.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 12px; font: 600 18px/1 var(--display); }
-.brand svg { width: 26px; height: 26px; }
-.side-tools { display: flex; gap: 8px; padding: 4px 14px 10px; }
+.side-tools { display: flex; gap: 8px; padding: 8px 14px 10px; }
 .side-tools input {
   flex: 1; min-width: 0; font: 13.5px var(--ui); color: var(--ink); background: var(--field);
   border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px; outline: none;
