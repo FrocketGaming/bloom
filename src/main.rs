@@ -7,6 +7,7 @@ mod dropdown;
 mod engine;
 mod files;
 mod hotkey;
+mod icon;
 mod matcher;
 mod palette;
 mod platform;
@@ -86,6 +87,7 @@ fn main() {
             palette::setup(&handle);
             dropdown::setup(&handle);
             tray::build(&handle)?;
+            icon::apply(&handle);
 
             startup::sync_at_startup(&state.config.read().unwrap());
             commands::set_window_theme(&handle, state.config.read().unwrap().theme);

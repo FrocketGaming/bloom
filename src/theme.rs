@@ -251,6 +251,12 @@ fn base_colour(accent: &str, custom: &str) -> Result<Option<Rgb>, String> {
     }
 }
 
+/// The colour to paint the icon in, or `None` to keep the icon as drawn: for the
+/// default pink, and for a choice that can't be understood.
+pub fn icon_colour(accent: &str, custom: &str) -> Option<Rgb> {
+    base_colour(accent, custom).ok().flatten()
+}
+
 /// Checks the accent settings before they are saved.
 pub fn validate(accent: &str, custom: &str) -> Result<(), String> {
     base_colour(accent, custom).map(|_| ())
@@ -507,5 +513,13 @@ mod tests {
         unique.sort_unstable();
         unique.dedup();
         assert_eq!(ids.len(), unique.len(), "ids are unique");
+    }
+
+    #[test]
+    fn the_icon_keeps_its_own_pink_unless_another_accent_is_chosen() {
+        assert_eq!(icon_colour("pink", "#123456"), None);
+        assert_eq!(icon_colour("custom", "not a colour"), None);
+        assert_eq!(icon_colour("blue", ""), Rgb::parse("#2f6fe4"));
+        assert_eq!(icon_colour("custom", "#12ab34"), Rgb::parse("#12ab34"));
     }
 }
