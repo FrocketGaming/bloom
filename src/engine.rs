@@ -54,7 +54,7 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
                     && undo.window == window
                     && state.config.read().unwrap().undo_with_backspace
                 {
-                    take_back(&state, &mut matcher, undo);
+                    take_back(&state, &rx, &mut matcher, undo);
                     continue;
                 }
                 if let KeyEvent::Nav(nav) = ev {
@@ -97,17 +97,68 @@ pub fn start(app: AppHandle, state: Arc<AppState>) {
 }
 
 /// Backspace right after an expansion: erase it and type the trigger back.
-fn take_back(state: &AppState, matcher: &mut Matcher, undo: Undo) {
-    // The Backspace the user pressed has already removed the last character,
-    // and Bloom waits for their typing to settle before adding its own.
+fn take_back(state: &AppState, rx: &Receiver<KeyEvent>, matcher: &mut Matcher, undo: Undo) {
+    // From here until the trigger is back, what the user types waits its turn
+    // instead of landing in the middle of the erase. Keys that got through
+    // before the hold began are already on screen and are taken in below.
+    platform::begin_hold();
     platform::wait_for_typing_to_settle();
-    platform::backspace(undo.erase.saturating_sub(1));
-    platform::type_text(&undo.restore);
+    // The Backspace the user pressed has already removed the last character.
+    let Some(late) = absorb_keys_after_undo(rx, undo.erase.saturating_sub(1)) else {
+        // The user moved on (clicked, moved the cursor, or backspaced through
+        // the whole expansion). What is on screen is theirs now; leave it.
+        matcher.reset();
+        platform::finish_hold();
+        return;
+    };
+    platform::backspace(late.erase);
+    let typed = format!("{}{}", undo.restore, late.trailing);
+    platform::type_text(&typed);
+    // Keys held back while Bloom typed go in last, where the user typed them.
+    let held = platform::finish_hold();
     // Bloom's own typing is invisible to the matcher; tell it what is on
     // screen, so the user can carry on from the restored trigger.
-    matcher.seed(&undo.restore);
+    matcher.seed(&format!("{typed}{held}"));
     // A use that was taken back was a mistake, so it should not count.
     usage::forget_use(state, &undo.usage_key);
+}
+
+/// What is on screen after the expansion's last character was removed, once
+/// the keys the user typed while Bloom waited are counted in.
+#[derive(Debug, PartialEq)]
+struct LateKeys {
+    /// Characters to erase: what is left of the expansion plus the late keys.
+    erase: usize,
+    /// The late keys, to type again after the restored trigger.
+    trailing: String,
+}
+
+/// Takes in the keys that reached the app between the undo's Backspace and the
+/// moment Bloom is ready to type. Characters sit after what is left of the
+/// expansion, so the erase covers them and they are typed again after the
+/// trigger. A Backspace removes the last late character, or, with none left,
+/// one more character of the expansion. Without this, a key typed right after
+/// the Backspace made Bloom erase one character too few, losing the key and
+/// leaving a piece of the expansion behind.
+///
+/// `left` is how many characters of the expansion are still on screen. Returns
+/// None when the undo should be dropped: the user moved the cursor, or
+/// backspaced past the expansion into their own text.
+fn absorb_keys_after_undo(rx: &Receiver<KeyEvent>, left: usize) -> Option<LateKeys> {
+    let mut left = left;
+    let mut trailing = String::new();
+    while let Ok(ev) = rx.try_recv() {
+        match ev {
+            KeyEvent::Char(c) => trailing.push(c),
+            KeyEvent::Backspace if trailing.pop().is_some() => {}
+            KeyEvent::Backspace if left > 1 => left -= 1,
+            KeyEvent::Backspace | KeyEvent::Reset | KeyEvent::Nav(_) => return None,
+        }
+    }
+    Some(LateKeys {
+        erase: left + trailing.chars().count(),
+        trailing,
+    })
 }
 
 /// Remembers how to take back an expansion that was just delivered, or forgets
@@ -233,7 +284,7 @@ fn expand(
     usage::record_use(state, &snippet);
     // Whatever the user typed meanwhile goes in after the expansion. Backspace
     // could no longer take the expansion back cleanly, so it can't be undone.
-    if platform::finish_hold() {
+    if !platform::finish_hold().is_empty() {
         *state.undo.lock().unwrap() = None;
     } else {
         remember_undo(
@@ -391,6 +442,40 @@ mod tests {
         let mut h = hit(4);
         assert!(absorb_late_keys(&queued(&[]), &mut h));
         assert_eq!((h.delete, h.trailing.as_str()), (4, ""));
+    }
+
+    #[test]
+    fn a_key_typed_after_the_undo_backspace_is_erased_and_typed_back() {
+        // `uv run main.py` with its last character removed leaves 13; an `x`
+        // that got through sits after them.
+        let rx = queued(&[KeyEvent::Char('x')]);
+        let late = absorb_keys_after_undo(&rx, 13).unwrap();
+        assert_eq!(late.erase, 14, "the rest of the expansion and the x");
+        assert_eq!(late.trailing, "x");
+    }
+
+    #[test]
+    fn nothing_typed_after_the_undo_backspace_erases_the_rest_of_the_expansion() {
+        let late = absorb_keys_after_undo(&queued(&[]), 13).unwrap();
+        assert_eq!((late.erase, late.trailing.as_str()), (13, ""));
+    }
+
+    #[test]
+    fn a_second_backspace_takes_a_late_key_then_more_of_the_expansion() {
+        let rx = queued(&[KeyEvent::Char('x'), KeyEvent::Backspace]);
+        let late = absorb_keys_after_undo(&rx, 13).unwrap();
+        assert_eq!((late.erase, late.trailing.as_str()), (13, ""));
+        let rx = queued(&[KeyEvent::Backspace]);
+        let late = absorb_keys_after_undo(&rx, 13).unwrap();
+        assert_eq!((late.erase, late.trailing.as_str()), (12, ""));
+    }
+
+    #[test]
+    fn backspacing_past_the_expansion_or_moving_the_cursor_drops_the_undo() {
+        let rx = queued(&[KeyEvent::Backspace]);
+        assert_eq!(absorb_keys_after_undo(&rx, 1), None);
+        let rx = queued(&[KeyEvent::Char('x'), KeyEvent::Reset]);
+        assert_eq!(absorb_keys_after_undo(&rx, 13), None);
     }
 
     #[test]
