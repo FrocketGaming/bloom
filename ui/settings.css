@@ -19,6 +19,8 @@
   --ui: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
+  /* The sidebar widens a little on big screens; the title bar's brand follows it. */
+  --side-w: clamp(270px, 16vw, 330px);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -53,7 +55,7 @@ body { display: flex; flex-direction: column; }
    colour; this one follows Bloom's theme. The left part continues the sidebar. */
 .titlebar { flex: none; display: flex; height: 38px; background: var(--bg); user-select: none; -webkit-user-select: none; }
 .tb-brand {
-  width: 270px; flex: none; display: flex; align-items: center; gap: 9px; padding: 0 14px;
+  width: var(--side-w); flex: none; display: flex; align-items: center; gap: 9px; padding: 0 14px;
   background: var(--side); border-right: 1px solid var(--line); font: 600 14px/1 var(--display);
 }
 .tb-brand > * { pointer-events: none; } /* clicks fall through to the drag region */
@@ -69,7 +71,7 @@ body { display: flex; flex-direction: column; }
 .tb-close:hover, .tb-close:active { background: #c42b1c; color: #ffffff; }
 .tb-close:active { background: #c63d30; }
 
-.app { flex: 1; min-height: 0; display: grid; grid-template-columns: 270px minmax(0, 1fr); }
+.app { flex: 1; min-height: 0; display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); }
 
 /* Sidebar */
 .side { background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
@@ -119,9 +121,17 @@ body { display: flex; flex-direction: column; }
 .toggle input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Main */
-.main { overflow-y: auto; min-width: 0; }
+/* Each page is a column that grows with the window up to a width that still
+   reads well, then stays centred, so a maximized window has no stretch of
+   empty space on one side. The page also fills the window's height, which
+   the editor gives to the text box. */
+.main { overflow-y: auto; min-width: 0; display: flex; flex-direction: column; --page-w: 1280px; }
+.main > * { width: 100%; max-width: var(--page-w); margin-inline: auto; }
 .banner { margin: 16px 28px 0; padding: 10px 14px; border-radius: 8px; background: var(--warn-bg); color: var(--warn-ink); font-size: 13px; white-space: pre-wrap; }
-.view { padding: 22px 28px 32px; }
+.view { padding: 22px 28px 32px; flex: 1 0 auto; display: flex; flex-direction: column; }
+.main > .banner, .main > .offer { width: auto; max-width: calc(var(--page-w) - 56px); margin-inline: max(28px, calc((100% - var(--page-w)) / 2 + 28px)); }
+#variables { max-width: 1040px; }
+#general { max-width: 700px; }
 .view-head { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
 .view-head h1 { flex: 1; min-width: 0; margin: 0; font: 600 24px/1.2 var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .head-actions { display: flex; gap: 8px; }
@@ -140,8 +150,12 @@ body { display: flex; flex-direction: column; }
 .unsaved { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
 .unsaved::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 
-.form { display: flex; flex-direction: column; gap: 16px; max-width: 860px; }
-.form.narrow { max-width: 560px; gap: 22px; }
+.form { display: flex; flex-direction: column; gap: 16px; flex: 1 0 auto; }
+.form.narrow { flex: none; }
+/* The text box takes the height the window has to spare. */
+.fld.grow { flex: 1 0 auto; }
+.fld.grow textarea { flex: 1 0 190px; }
+.form.narrow { gap: 22px; }
 .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: end; }
 .fld { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .fld > span, .body-head > span { font-size: 12.5px; font-weight: 600; color: var(--muted); }
@@ -161,7 +175,7 @@ textarea { min-height: 190px; resize: vertical; font-size: 14px !important; line
 .chips select { border: 1px solid var(--line); background: var(--chip); color: inherit; border-radius: 6px; padding: 3px 6px; font: inherit; font-size: 12.5px; cursor: pointer; max-width: 150px; }
 .chips select:hover { border-color: var(--accent); }
 
-.preview { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; background: var(--side); max-height: 300px; overflow-y: auto; }
+.preview { border: 1px solid var(--line); border-radius: 9px; padding: 12px 14px; background: var(--side); max-height: min(300px, 30vh); overflow-y: auto; flex: none; }
 .preview-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
 .preview-label span { text-transform: none; letter-spacing: 0; font-weight: 400; }
 .preview pre { margin: 0; font: 13.5px/1.6 var(--mono); white-space: pre-wrap; word-break: break-word; min-height: 1.6em; }
@@ -176,7 +190,7 @@ textarea { min-height: 190px; resize: vertical; font-size: 14px !important; line
 .inline input { width: 90px; }
 .hotkey { font: 500 14px var(--mono); border: 1px solid var(--line); background: var(--field); border-radius: 8px; padding: 9px 14px; cursor: pointer; min-width: 190px; text-align: left; }
 .hotkey.rec { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); color: var(--accent); }
-.hint { margin: 0; font-size: 12.5px; color: var(--muted); }
+.hint { margin: 0; font-size: 12.5px; color: var(--muted); max-width: 90ch; }
 .seg { display: inline-flex; gap: 3px; padding: 3px; border: 1px solid var(--line); border-radius: 9px; background: var(--field); align-self: flex-start; }
 .seg button { border: 0; background: none; border-radius: 6px; padding: 6px 13px; cursor: pointer; }
 .seg button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
