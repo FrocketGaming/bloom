@@ -47,6 +47,9 @@ fn build(app: &AppHandle) -> tauri::Result<WebviewWindow> {
         .min_inner_size(780.0, 500.0)
         .center()
         .build()?;
+    if let Some(icon) = crate::icon::current(app) {
+        let _ = w.set_icon(icon);
+    }
 
     let state = app.state::<Arc<AppState>>().inner().clone();
     let win = w.clone();

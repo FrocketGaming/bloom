@@ -44,7 +44,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<()> {
     app.manage(PauseItem(pause));
     app.manage(SearchItem(search));
 
-    TrayIconBuilder::with_id("bloom")
+    TrayIconBuilder::with_id(crate::icon::TRAY_ID)
         .icon(app.default_window_icon().cloned().expect("app icon"))
         .tooltip("Bloom")
         .menu(&menu)

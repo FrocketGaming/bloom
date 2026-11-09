@@ -300,6 +300,7 @@ fn adopt(app: &AppHandle, state: &AppState, old: &Config, config: Config) {
         || config.accent_color != old.accent_color;
     if look_changed {
         set_window_theme(app, config.theme);
+        crate::icon::apply(app);
         // Every open window redraws itself in the new look.
         let _ = app.emit("theme-changed", ());
     }
