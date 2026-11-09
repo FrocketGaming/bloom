@@ -68,22 +68,22 @@ pub fn begin_hold() {
 
 /// Ends the hold and types what was held back, now that Bloom is done typing.
 /// Characters that arrive while those are typed are held and typed too, so none
-/// can slip in between. Returns true if anything was typed.
-pub fn finish_hold() -> bool {
-    let mut typed_any = false;
+/// can slip in between. Returns what was typed.
+pub fn finish_hold() -> String {
+    let mut typed = String::new();
     loop {
         let held: String = {
             let Ok(mut held) = HELD_BACK.lock() else {
-                return typed_any;
+                return typed;
             };
             if held.is_empty() {
                 HOLD_UNTIL_MS.store(0, Ordering::Relaxed);
-                return typed_any;
+                return typed;
             }
             held.drain(..).collect()
         };
         type_text(&held);
-        typed_any = true;
+        typed.push_str(&held);
     }
 }
 
