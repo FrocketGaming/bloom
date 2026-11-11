@@ -327,6 +327,40 @@ fn msaa_caret(focus: HWND) -> Option<RECT> {
     }
 }
 
+/// Diagnostic for checking the lookup in real apps: when `BLOOM_CARET_PROBE`
+/// is set, logs which source answered each time the answer changes.
+pub fn start_caret_probe() {
+    if std::env::var_os("BLOOM_CARET_PROBE").is_none() {
+        return;
+    }
+    let spawned = thread::Builder::new()
+        .name("bloom-caret-probe".into())
+        .spawn(|| {
+            let mut last: Option<Option<CaretPosition>> = None;
+            loop {
+                thread::sleep(Duration::from_millis(500));
+                let now = caret_position();
+                if last != Some(now) {
+                    match now {
+                        Some(p) => eprintln!(
+                            "bloom: caret via {:?} at ({}, {}) {}x{}",
+                            p.source,
+                            p.left,
+                            p.top,
+                            p.right - p.left,
+                            p.bottom - p.top
+                        ),
+                        None => eprintln!("bloom: caret not found"),
+                    }
+                    last = Some(now);
+                }
+            }
+        });
+    if spawned.is_err() {
+        eprintln!("bloom: couldn't start the caret probe");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,39 +396,5 @@ mod tests {
         thread::sleep(Duration::from_millis(300));
         assert_eq!(bounded.call(), None, "times out again, but is accepted");
         assert!(bounded.busy.load(Ordering::Acquire));
-    }
-}
-
-/// Diagnostic for checking the lookup in real apps: when `BLOOM_CARET_PROBE`
-/// is set, logs which source answered each time the answer changes.
-pub fn start_caret_probe() {
-    if std::env::var_os("BLOOM_CARET_PROBE").is_none() {
-        return;
-    }
-    let spawned = thread::Builder::new()
-        .name("bloom-caret-probe".into())
-        .spawn(|| {
-            let mut last: Option<Option<CaretPosition>> = None;
-            loop {
-                thread::sleep(Duration::from_millis(500));
-                let now = caret_position();
-                if last != Some(now) {
-                    match now {
-                        Some(p) => eprintln!(
-                            "bloom: caret via {:?} at ({}, {}) {}x{}",
-                            p.source,
-                            p.left,
-                            p.top,
-                            p.right - p.left,
-                            p.bottom - p.top
-                        ),
-                        None => eprintln!("bloom: caret not found"),
-                    }
-                    last = Some(now);
-                }
-            }
-        });
-    if spawned.is_err() {
-        eprintln!("bloom: couldn't start the caret probe");
     }
 }

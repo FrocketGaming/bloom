@@ -434,7 +434,12 @@ pub fn cursor_left(n: usize) {
     while remaining > 0 {
         let batch = remaining.min(CURSOR_BATCH);
         let inputs: Vec<INPUT> = (0..batch)
-            .flat_map(|_| [key_input(VK_LEFT, 0, 0), key_input(VK_LEFT, 0, KEYEVENTF_KEYUP)])
+            .flat_map(|_| {
+                [
+                    key_input(VK_LEFT, 0, 0),
+                    key_input(VK_LEFT, 0, KEYEVENTF_KEYUP),
+                ]
+            })
             .collect();
         send(&inputs);
         remaining -= batch;
