@@ -420,9 +420,27 @@ pub fn backspace(n: usize) {
     }
 }
 
+/// How many Left presses go out in one call. Moving the cursor back over a
+/// long body took seconds at one press per gap, since the gap is a sleep and
+/// Windows rounds a short sleep up to many milliseconds. A Left press that goes
+/// missing only leaves the cursor a character off, unlike a Backspace, so it can
+/// be batched where Backspace is not.
+const CURSOR_BATCH: usize = 32;
+
+/// Moves the cursor left `n` characters, in batches of `CURSOR_BATCH` presses
+/// with one pause between batches.
 pub fn cursor_left(n: usize) {
-    if n > 0 {
-        tap(VK_LEFT, n);
+    let mut remaining = n;
+    while remaining > 0 {
+        let batch = remaining.min(CURSOR_BATCH);
+        let inputs: Vec<INPUT> = (0..batch)
+            .flat_map(|_| [key_input(VK_LEFT, 0, 0), key_input(VK_LEFT, 0, KEYEVENTF_KEYUP)])
+            .collect();
+        send(&inputs);
+        remaining -= batch;
+        if remaining > 0 {
+            thread::sleep(CHAR_GAP);
+        }
     }
 }
 
