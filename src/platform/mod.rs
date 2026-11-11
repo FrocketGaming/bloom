@@ -12,7 +12,7 @@ mod startup;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use self::caret::{CaretPosition, caret_position, start_caret_probe};
+pub use self::caret::{CaretPosition, caret_position_bounded, start_caret_probe};
 #[cfg(windows)]
 pub use self::password::{password_field_focused, start_password_watch};
 #[cfg(windows)]

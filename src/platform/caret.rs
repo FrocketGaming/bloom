@@ -12,6 +12,9 @@
 use std::cell::{Cell, RefCell};
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, OnceLock};
 use std::thread;
 use std::time::Duration;
 
@@ -70,6 +73,71 @@ pub fn caret_position() -> Option<CaretPosition> {
             source,
         })
     })
+}
+
+/// How long the engine waits for the focused app to say where its caret is.
+const LOOKUP_TIMEOUT: Duration = Duration::from_millis(300);
+
+/// Runs a slow call on its own thread and gives up on it after a timeout.
+///
+/// Asking another app for its caret is a cross-process call, and an app that
+/// has hung never answers. While one call is stuck, later calls return
+/// straight away instead of piling up behind it.
+struct Bounded<T> {
+    requests: Sender<Sender<T>>,
+    busy: Arc<AtomicBool>,
+    timeout: Duration,
+}
+
+impl<T: Send + 'static> Bounded<T> {
+    /// Starts the worker thread, or `None` if it can't be started.
+    fn new(timeout: Duration, work: impl Fn() -> T + Send + 'static) -> Option<Self> {
+        let (requests, incoming) = mpsc::channel::<Sender<T>>();
+        let busy = Arc::new(AtomicBool::new(false));
+        let worker_busy = Arc::clone(&busy);
+        thread::Builder::new()
+            .name("bloom-caret-lookup".into())
+            .spawn(move || {
+                for reply in incoming {
+                    let answer = work();
+                    worker_busy.store(false, Ordering::Release);
+                    // The caller may have stopped waiting; that is fine.
+                    let _ = reply.send(answer);
+                }
+            })
+            .ok()?;
+        Some(Self {
+            requests,
+            busy,
+            timeout,
+        })
+    }
+
+    /// The call's answer, or `None` if it is still stuck from an earlier call
+    /// or doesn't finish within the timeout.
+    fn call(&self) -> Option<T> {
+        if self.busy.swap(true, Ordering::AcqRel) {
+            return None;
+        }
+        let (reply, answer) = mpsc::channel();
+        if self.requests.send(reply).is_err() {
+            self.busy.store(false, Ordering::Release);
+            return None;
+        }
+        answer.recv_timeout(self.timeout).ok()
+    }
+}
+
+/// Like `caret_position`, but never waits longer than `LOOKUP_TIMEOUT`. Gives
+/// `None` when the app is too slow to answer, so the caller carries on without
+/// a suggestion list instead of freezing typing.
+pub fn caret_position_bounded() -> Option<CaretPosition> {
+    static LOOKUP: OnceLock<Option<Bounded<Option<CaretPosition>>>> = OnceLock::new();
+    LOOKUP
+        .get_or_init(|| Bounded::new(LOOKUP_TIMEOUT, caret_position))
+        .as_ref()?
+        .call()
+        .flatten()
 }
 
 thread_local! {
@@ -290,5 +358,43 @@ pub fn start_caret_probe() {
         });
     if spawned.is_err() {
         eprintln!("bloom: couldn't start the caret probe");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_quick_call_returns_its_answer() {
+        let bounded = Bounded::new(Duration::from_millis(500), || 7).unwrap();
+        assert_eq!(bounded.call(), Some(7));
+        assert_eq!(bounded.call(), Some(7));
+    }
+
+    #[test]
+    fn a_stuck_call_times_out_and_later_calls_do_not_queue() {
+        let bounded = Bounded::new(Duration::from_millis(50), || {
+            thread::sleep(Duration::from_millis(400));
+            7
+        })
+        .unwrap();
+        assert_eq!(bounded.call(), None);
+        let started = std::time::Instant::now();
+        assert_eq!(bounded.call(), None);
+        assert!(started.elapsed() < Duration::from_millis(30));
+    }
+
+    #[test]
+    fn a_call_is_accepted_again_once_the_stuck_one_finishes() {
+        let bounded = Bounded::new(Duration::from_millis(50), || {
+            thread::sleep(Duration::from_millis(120));
+            7
+        })
+        .unwrap();
+        assert_eq!(bounded.call(), None);
+        thread::sleep(Duration::from_millis(300));
+        assert_eq!(bounded.call(), None, "times out again, but is accepted");
+        assert!(bounded.busy.load(Ordering::Acquire));
     }
 }

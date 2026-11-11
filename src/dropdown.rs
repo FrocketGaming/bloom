@@ -123,7 +123,7 @@ pub fn open(
     // following the cursor and jittering.
     let caret = match &previous {
         Some(menu) => Some(menu.caret),
-        None => platform::caret_position(),
+        None => platform::caret_position_bounded(),
     };
     let Some(caret) = caret else {
         close(app);

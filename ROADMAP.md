@@ -5,12 +5,12 @@ to pick them up cold. Nothing here is a commitment.
 
 ## Smaller follow-ups
 
-- Caret lookup runs on the engine thread. Opening the suggestion list asks the
-  focused app where its text cursor is (`src/platform/caret.rs`), which is a
-  cross-process call. A hung app can stall the engine, and keys queue behind
-  it. Moving the lookup off the engine thread, or giving it a timeout, would
-  fix that. v0.3.0 only made each lookup cheaper by reusing one UI Automation
-  client per thread.
+- Caret lookup now runs on its own thread with a 300 ms timeout
+  (`caret_position_bounded` in `src/platform/caret.rs`), so a hung app no longer
+  stalls the engine. The stuck call itself cannot be cancelled: it stays on the
+  worker until the app answers, and lookups in the meantime give no list. If
+  that ever matters, the worker could be abandoned and replaced, at the cost of
+  leaking a thread each time.
 - Matcher scans every trigger on each key (`src/matcher.rs`, four passes).
   Negligible at hundreds of triggers. If libraries reach thousands, index the
   triggers by their last character, or build a trie.
